@@ -273,6 +273,9 @@ Limites du compte gratuit : 7 jours de validité, 3 apps au plus, pas de notific
 
 ### 4.1 Entités SwiftData (`App/Data/Models`)
 Toutes les relations « enfant » sont en `deleteRule: .cascade`.
+Les identifiants propres s'appellent `uuid` (et non `id`, déjà fourni par SwiftData).
+Fichiers : `AthleteProfile.swift`, `Goal.swift`, `Run.swift` (avec `Split` et `RunTrack`), `Plan.swift` (`TrainingPlan`, `PlannedWorkout`), `Misc.swift` (`DailyMetric`, `ChatMessage`, `SyncState`).
+Insérer un objet dans le `ModelContext` **avant** de toucher à ses relations.
 
 **`AthleteProfile`** — une seule ligne.
 | Champ | Type | Note |
@@ -297,7 +300,7 @@ Toutes les relations « enfant » sont en `deleteRule: .cascade`.
 | `medicalDisclaimerAcceptedAt` | Date? | Obligatoire pour sortir de l'onboarding |
 | `updatedAt` | Date | |
 
-**`Goal`** — `id: UUID`, `kind` (`race` / `fitness`), `name`, `raceDistanceM: Double?`, `raceDate: Date?`, `targetTimeS: Double?`, `isActive: Bool`. Un seul objectif actif.
+**`Goal`** — `uuid: UUID`, `kind` (`race` / `fitness`), `name`, `raceDistanceM: Double?`, `raceDate: Date?`, `targetTimeS: Double?`, `isActive: Bool`. Un seul objectif actif.
 
 **`Run`** — une activité importée.
 | Champ | Type | Note |
@@ -336,12 +339,12 @@ Le tracé n'est **pas** modélisé en une entité par point : 2 000 points par s
 
 **`DailyMetric`** — `dayKey: String` (unique), `sleepSeconds: Double?`, `sleepScore: Int?`, `hrvLastNightMs: Double?`, `hrvStatus: String?`, `restingHR: Int?`, `vo2max: Double?`, `trainingReadiness: Int?`, `trainingStatus: String?`, `bodyBattery: Int?`.
 
-**`TrainingPlan`** — `id: UUID`, `createdAt`, `goal: Goal?`, `macroWeeksData: Data` (`[MacroWeek]` JSON), `isActive: Bool`, `workouts: [PlannedWorkout]` cascade.
+**`TrainingPlan`** — `uuid: UUID`, `createdAt`, `goal: Goal?`, `macroWeeksData: Data` (`[MacroWeek]` JSON), `isActive: Bool`, `workouts: [PlannedWorkout]` cascade.
 
 **`PlannedWorkout`**
 | Champ | Type | Note |
 |---|---|---|
-| `id` | UUID | |
+| `uuid` | UUID | |
 | `dayKey` | String | |
 | `kind` | String | `WorkoutKind` (§5.3) |
 | `title`, `rationale` | String | |
@@ -357,7 +360,7 @@ Le tracé n'est **pas** modélisé en une entité par point : 2 000 points par s
 | `plan` | TrainingPlan | |
 | `updatedAt` | Date | |
 
-**`ChatMessage`** — `id: UUID`, `role` (`user` / `assistant`), `text`, `createdAt`, `actionsData: Data?` (`[PlanAction]` JSON), `actionsState` (`none` / `proposed` / `applied` / `rejected`).
+**`ChatMessage`** — `uuid: UUID`, `role` (`user` / `assistant`), `text`, `createdAt`, `actionsData: Data?` (`[PlanAction]` JSON), `actionLines: [String]` (résumé lisible des actions, pour `ConfirmCard`), `actionsState` (`none` / `proposed` / `applied` / `rejected`).
 
 **`SyncState`** — une seule ligne : `lastGarminSyncAt: Date?`, `lastSyncError: String?`, `backfillDone: Bool`, `garminDisplayName: String?`, `nextAllowedGarminCallAt: Date?`, `consecutiveFailures: Int`.
 
@@ -388,7 +391,8 @@ public struct Track: Codable, Sendable {
 - **Synchro incrémentale** : 40 requêtes au plus par passage.
 - **Plan** : local. Le calendrier Garmin n'est qu'un miroir en écriture des 7 prochains jours. L'app ne relit jamais le calendrier Garmin.
 - **Rattachement réalisé/prévu** (`WorkoutMatcher`) : un `Run` est rattaché au `PlannedWorkout` de type course du même `dayKey` encore `planned`. À la fin d'un jour local, une séance toujours `planned` passe à `missed`.
-- **Mode factice** : argument de lancement `-mockData` → `ModelContainer` en mémoire rempli par `MockData.seed()`, services réseau remplacés par des versions factices. Utilisé par l'étape 1 et par les captures de la CI.
+- **Mode factice** : `ModelContainer` en mémoire rempli par `MockData.seed()`. À l'étape 1 c'est le seul mode (`AppEnvironment.makeContainer`). À l'étape 2, la base devient persistante et le mode factice passe derrière l'argument de lancement `-mockData`, que `ScreenshotTests` devra alors ajouter.
+- **Captures d'écran** : l'argument `-screen <nom>` affiche directement un écran (`DebugScreen` dans `RootView.swift`), `-scheme light|dark` force l'apparence. Tout nouvel écran s'ajoute à `DebugScreen` et à la liste de `ScreenshotTests`.
 
 ---
 
@@ -1016,12 +1020,12 @@ Message utilisateur du chat : `ATHLETE_SNAPSHOT`, `WEEK_BRIEF` de la semaine en 
 ### 7.1 Identité
 Sombre d'abord, calme, une seule couleur vive. Les chiffres sont les héros : gros, arrondis, peu de texte autour. Une information principale par écran.
 
-**Couleurs** (`Assets.xcassets`, chaque couleur a une variante claire et une sombre ; accès par `Color.rc.<nom>`)
+**Couleurs** (définies en code dans `DesignSystem/Tokens.swift`, chaque couleur a une variante claire et une sombre ; accès par `Color.rc.<nom>`)
 | Jeton | Sombre | Clair | Usage |
 |---|---|---|---|
 | `background` | `#0B0D10` | `#F4F5F7` | Fond d'écran |
 | `surface` | `#15181D` | `#FFFFFF` | Cartes |
-| `surfaceRaised` | `#1E2228` | `#FFFFFF` | Cartes dans une carte, champs |
+| `surfaceRaised` | `#1E2228` | `#EEF0F3` | Cartes dans une carte, champs |
 | `separator` | `#2A2F37` | `#E3E5EA` | Filets |
 | `textPrimary` | `#F5F7FA` | `#0B0D10` | |
 | `textSecondary` | `#9AA3AF` | `#5B6470` | |
@@ -1048,9 +1052,9 @@ La couleur n'est jamais le seul porteur d'information : chaque type a aussi une 
 
 **Icônes** : SF Symbols uniquement. `easy` `figure.run` · `long` `road.lanes` · `tempo` `speedometer` · `intervals` `bolt.fill` · `recovery` `leaf.fill` · `strength` `dumbbell.fill` · `race` `flag.checkered`.
 
-**Mouvement** : `Animation.rc.standard = .spring(response: 0.35, dampingFraction: 0.85)`. Chiffres qui changent : `.contentTransition(.numericText())`. Respect de « Réduire les animations » (le replay reste, les transitions décoratives disparaissent).
+**Mouvement** : `Animation.rcStandard = .spring(response: 0.35, dampingFraction: 0.85)`. Chiffres qui changent : `.contentTransition(.numericText())`. Respect de « Réduire les animations » (le replay reste, les transitions décoratives disparaissent).
 
-**Haptique** (`Haptics.swift`, via `.sensoryFeedback`) : `selection` pour le changement d'onglet de période et le défilement de la barre du replay ; `success` pour la fin de synchro manuelle et l'application d'un plan ; `warning` pour une erreur. Rien d'autre.
+**Haptique** (directement par `.sensoryFeedback` dans les vues, pas de fichier dédié) : `selection` pour le changement d'onglet de période et le défilement de la barre du replay ; `success` pour la fin de synchro manuelle et l'application d'un plan ; `warning` pour une erreur. Rien d'autre.
 
 **Accessibilité** : chaque tuile de stat a un libellé VoiceOver complet (« Allure moyenne, 6 minutes 30 par kilomètre »). Les graphiques ont un résumé textuel. Les mises en page tiennent jusqu'à la taille de texte `xxxLarge` (les grilles de tuiles passent sur une colonne).
 

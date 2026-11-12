@@ -75,6 +75,8 @@ struct DebugScreen: View {
             }
         case "replay":
             if let run = runs.first { ReplayView(run: run) }
+        case "replayflat":
+            if let run = runs.first { ReplayView(run: run, style: 1) }
         case "coach":
             NavigationStack { CoachChatView() }
         case "progress":

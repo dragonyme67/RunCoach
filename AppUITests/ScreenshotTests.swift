@@ -4,7 +4,7 @@ import XCTest
 /// la CI les exporte dans l'artefact `screenshots`.
 final class ScreenshotTests: XCTestCase {
     private let screens = [
-        "today", "plan", "planned", "strength", "run", "replay", "coach", "progress", "settings", "onboarding"
+        "today", "plan", "planned", "strength", "run", "replay", "replayflat", "coach", "progress", "settings", "onboarding"
     ]
 
     func testCaptureAllScreens() {
@@ -16,7 +16,7 @@ final class ScreenshotTests: XCTestCase {
                 app.launch()
                 XCTAssertTrue(app.wait(for: .runningForeground, timeout: 30), "\(screen) ne démarre pas")
                 // Laisse le temps aux données factices, aux graphiques et à la carte de s'afficher.
-                Thread.sleep(forTimeInterval: screen == "replay" || screen == "run" ? 4 : 1.5)
+                Thread.sleep(forTimeInterval: screen.hasPrefix("replay") || screen == "run" ? 5 : 1.5)
                 let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
                 attachment.name = "\(screen)-\(scheme)"
                 attachment.lifetime = .keepAlways

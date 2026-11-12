@@ -8,6 +8,8 @@ import RunCoachCore
 // la lecture animée (horloge, caméra lissée) arrive à l'étape 3 (ARCHITECTURE.md §8).
 struct ReplayView: View {
     let run: Run
+    /// 0 = satellite avec relief 3D, 1 = satellite à plat, 2 = plan.
+    @State var style = 0
     @Environment(\.dismiss) private var dismiss
     @State private var track: Track?
     @State private var coordinates: [CLLocationCoordinate2D] = []
@@ -40,7 +42,11 @@ struct ReplayView: View {
         .onChange(of: progress) {
             updateCamera()
         }
+        .onChange(of: style) {
+            updateCamera()
+        }
         .sensoryFeedback(.selection, trigger: speed)
+        .sensoryFeedback(.selection, trigger: style)
     }
 
     private var map: some View {
@@ -50,17 +56,29 @@ struct ReplayView: View {
                     .stroke(Color.white.opacity(0.55), lineWidth: 4)
                 MapPolyline(coordinates: Array(coordinates.prefix(max(2, index + 1))))
                     .stroke(Color.rc.accent, lineWidth: 5)
+                // Disque posé sur le sol : placé comme le tracé, mais masqué par les arbres en relief 3D.
+                MapCircle(center: coordinates[index], radius: 9)
+                    .foregroundStyle(Color.rc.accent)
+                    .stroke(Color.white, lineWidth: 3)
+                // Repère à l'écran : toujours visible. Sa position en relief 3D est à valider sur iPhone (étape 3).
                 Annotation("", coordinate: coordinates[index]) {
                     Circle()
                         .fill(Color.rc.accent)
                         .frame(width: 18, height: 18)
                         .overlay(Circle().stroke(Color.white, lineWidth: 3))
-                        .shadow(color: Color.rc.accent.opacity(0.8), radius: 8)
                 }
             }
         }
-        .mapStyle(.imagery(elevation: .realistic))
+        .mapStyle(mapStyle)
         .ignoresSafeArea()
+    }
+
+    private var mapStyle: MapStyle {
+        switch style {
+        case 1: return .imagery(elevation: .flat)
+        case 2: return .standard(elevation: .realistic)
+        default: return .imagery(elevation: .realistic)
+        }
     }
 
     private var closeButton: some View {
@@ -76,6 +94,17 @@ struct ReplayView: View {
             }
             .accessibilityLabel("Fermer")
             Spacer()
+            Button {
+                style = (style + 1) % 3
+            } label: {
+                Image(systemName: style == 0 ? "view.3d" : (style == 1 ? "globe.europe.africa.fill" : "map.fill"))
+                    .font(.headline)
+                    .foregroundStyle(Color.white)
+                    .frame(width: 44, height: 44)
+                    .background(.ultraThinMaterial, in: Circle())
+            }
+            .accessibilityLabel("Style de carte")
+            .accessibilityValue(style == 0 ? "Satellite 3D" : (style == 1 ? "Satellite à plat" : "Plan"))
         }
         .padding(.horizontal, Spacing.l)
     }
@@ -177,7 +206,7 @@ struct ReplayView: View {
 
     private func updateCamera() {
         guard coordinates.count > 1 else { return }
-        position = .camera(MapCamera(centerCoordinate: coordinates[index], distance: 900, heading: 0, pitch: 60))
+        position = .camera(MapCamera(centerCoordinate: coordinates[index], distance: 900, heading: 0, pitch: style == 1 ? 0 : 60))
     }
 }
 

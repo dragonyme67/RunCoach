@@ -20,7 +20,7 @@ struct ProgressScreen: View {
                     SectionHeader(title: "Volume par semaine")
                     Chart(weeks) { week in
                         BarMark(x: .value("Semaine", week.start, unit: .weekOfYear), y: .value("km", week.km))
-                            .foregroundStyle(Color.rc.accent)
+                            .foregroundStyle(Color.rc.accentText)
                             .cornerRadius(5)
                     }
                     .chartYAxisLabel("km")
@@ -31,14 +31,24 @@ struct ProgressScreen: View {
                 VStack(alignment: .leading, spacing: Spacing.m) {
                     SectionHeader(title: "Allure moyenne")
                     Chart(weeks.filter { $0.paceSPerKm > 0 }) { week in
-                        LineMark(x: .value("Semaine", week.start, unit: .weekOfYear), y: .value("min/km", week.paceSPerKm / 60))
-                            .foregroundStyle(Color.rc.accent)
+                        LineMark(x: .value("Semaine", week.start, unit: .weekOfYear), y: .value("Allure", week.paceSPerKm))
+                            .foregroundStyle(Color.rc.accentText)
                             .interpolationMethod(.catmullRom)
-                        PointMark(x: .value("Semaine", week.start, unit: .weekOfYear), y: .value("min/km", week.paceSPerKm / 60))
-                            .foregroundStyle(Color.rc.accent)
+                        PointMark(x: .value("Semaine", week.start, unit: .weekOfYear), y: .value("Allure", week.paceSPerKm))
+                            .foregroundStyle(Color.rc.accentText)
                     }
                     // Axe inversé : plus haut = plus rapide.
                     .chartYScale(domain: .automatic(includesZero: false, reversed: true))
+                    .chartYAxis {
+                        AxisMarks { value in
+                            AxisGridLine()
+                            AxisValueLabel {
+                                if let seconds = value.as(Double.self) {
+                                    Text(Fmt.pace(sPerKm: seconds))
+                                }
+                            }
+                        }
+                    }
                     .chartYAxisLabel("min/km")
                     .frame(height: 150)
                     .accessibilityLabel("Allure moyenne par semaine")
@@ -48,9 +58,9 @@ struct ProgressScreen: View {
                     SectionHeader(title: "Charge")
                     Chart(weeks) { week in
                         AreaMark(x: .value("Semaine", week.start, unit: .weekOfYear), y: .value("Charge", week.load))
-                            .foregroundStyle(Color.rc.accent.opacity(0.25))
+                            .foregroundStyle(Color.rc.accentText.opacity(0.25))
                         LineMark(x: .value("Semaine", week.start, unit: .weekOfYear), y: .value("Charge", week.load))
-                            .foregroundStyle(Color.rc.accent)
+                            .foregroundStyle(Color.rc.accentText)
                     }
                     .frame(height: 130)
                     .accessibilityLabel("Charge d'entraînement par semaine")
