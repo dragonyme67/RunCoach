@@ -1,0 +1,28 @@
+import XCTest
+
+/// Capture chaque écran en clair et en sombre. Les images sortent en pièces jointes du résultat de test ;
+/// la CI les exporte dans l'artefact `screenshots`.
+final class ScreenshotTests: XCTestCase {
+    private let screens = [
+        "today", "plan", "planned", "strength", "run", "replay", "coach", "progress", "settings", "onboarding"
+    ]
+
+    func testCaptureAllScreens() {
+        continueAfterFailure = true
+        for scheme in ["dark", "light"] {
+            for screen in screens {
+                let app = XCUIApplication()
+                app.launchArguments = ["-screen", screen, "-scheme", scheme]
+                app.launch()
+                XCTAssertTrue(app.wait(for: .runningForeground, timeout: 30), "\(screen) ne démarre pas")
+                // Laisse le temps aux données factices, aux graphiques et à la carte de s'afficher.
+                Thread.sleep(forTimeInterval: screen == "replay" || screen == "run" ? 4 : 1.5)
+                let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+                attachment.name = "\(screen)-\(scheme)"
+                attachment.lifetime = .keepAlways
+                add(attachment)
+                app.terminate()
+            }
+        }
+    }
+}

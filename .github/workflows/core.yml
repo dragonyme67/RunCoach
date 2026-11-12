@@ -1,0 +1,17 @@
+name: Core
+on:
+  push:
+    paths:
+      - "Packages/**"
+      - ".github/workflows/core.yml"
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container: swift:6.0
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test RunCoachCore
+        working-directory: Packages/RunCoachCore
+        run: swift test

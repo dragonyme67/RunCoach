@@ -1,0 +1,69 @@
+name: iOS
+on:
+  push:
+    branches: [main]
+    paths:
+      - "App/**"
+      - "AppUITests/**"
+      - "Packages/**"
+      - "project.yml"
+      - "scripts/**"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Versions
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcrun simctl list devices available | head -40
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Pick a large iPhone simulator
+        id: sim
+        run: echo "udid=$(python3 scripts/pick_simulator.py)" >> "$GITHUB_OUTPUT"
+      - name: Build app and capture screenshots
+        run: |
+          set -o pipefail
+          xcodebuild test -quiet \
+            -project RunCoach.xcodeproj -scheme RunCoach \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -derivedDataPath build/dd-sim \
+            -resultBundlePath build/ui.xcresult
+      - name: Export screenshots
+        if: always()
+        run: |
+          mkdir -p build/screenshots
+          xcrun xcresulttool export attachments --path build/ui.xcresult --output-path build/screenshots || true
+          ls -la build/screenshots || true
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: build/screenshots
+          if-no-files-found: warn
+      - name: Build unsigned IPA
+        run: |
+          set -o pipefail
+          xcodebuild build -quiet \
+            -project RunCoach.xcodeproj -scheme RunCoach \
+            -configuration Release -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath build/dd-ios \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+          mkdir -p build/ipa/Payload
+          cp -R build/dd-ios/Build/Products/Release-iphoneos/RunCoach.app build/ipa/Payload/
+          (cd build/ipa && zip -qry ../RunCoach.ipa Payload)
+          ls -la build/RunCoach.ipa
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipa
+          path: build/RunCoach.ipa
