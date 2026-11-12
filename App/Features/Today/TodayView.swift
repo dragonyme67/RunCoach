@@ -38,7 +38,7 @@ struct TodayView: View {
                 }
                 weekCard(week)
                 if let run = runs.first {
-                    SectionHeader(title: "Dernière sortie")
+                    SectionHeader(title: "Dernière activité")
                     NavigationLink(value: run) {
                         RunRow(run: run)
                     }
@@ -178,7 +178,7 @@ struct RunRow: View {
 
     var body: some View {
         HStack(spacing: Spacing.l) {
-            Image(systemName: "figure.run")
+            Image(systemName: run.isStrength ? "dumbbell.fill" : "figure.run")
                 .font(.title3)
                 .foregroundStyle(Color.rc.onAccent)
                 .frame(width: 44, height: 44)
@@ -193,11 +193,12 @@ struct RunRow: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                Text(Fmt.km(run.distanceM) + " km")
+                // Sans distance (renfo) : la durée, puis la fréquence cardiaque moyenne.
+                Text(run.distanceM > 0 ? Fmt.km(run.distanceM) + " km" : Fmt.duration(run.durationS))
                     .font(.rcStat)
                     .monospacedDigit()
                     .foregroundStyle(Color.rc.textPrimary)
-                Text(Fmt.pace(sPerKm: run.paceSPerKm) + " /km")
+                Text(run.distanceM > 0 ? Fmt.pace(sPerKm: run.paceSPerKm) + " /km" : (run.avgHR.map { "\($0) bpm" } ?? ""))
                     .font(.caption)
                     .monospacedDigit()
                     .foregroundStyle(Color.rc.textSecondary)

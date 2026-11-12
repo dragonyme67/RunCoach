@@ -5,10 +5,11 @@ import XCTest
 /// Un test par apparence : si le simulateur se bloque, la CI ne relance que la moitié concernée.
 final class ScreenshotTests: XCTestCase {
     private let screens = [
-        "today", "plan", "planned", "strength", "run", "replay", "replaymap", "coach", "progress", "settings", "onboarding"
+        "today", "plan", "planned", "strength", "activities", "run", "activity", "replay", "replaymap",
+        "coach", "progress", "settings", "onboarding"
     ]
 
-    /// Ouvrir une sortie doit afficher son détail, depuis l'accueil comme depuis la liste de l'onglet Progrès
+    /// Ouvrir une sortie doit afficher son détail, depuis l'accueil comme depuis l'onglet Activités
     /// (bug vu sur iPhone : la liste se rouvrait à la place du détail).
     func testOpenRunShowsItsDetail() {
         let app = XCUIApplication()
@@ -19,17 +20,11 @@ final class ScreenshotTests: XCTestCase {
         app.buttons["run-row"].firstMatch.tap()
         XCTAssertTrue(replay.waitForExistence(timeout: 10), "Accueil : le détail de la sortie ne s'ouvre pas")
 
-        app.tabBars.buttons["Progrès"].tap()
-        let allRuns = app.buttons["all-runs"]
-        XCTAssertTrue(allRuns.waitForExistence(timeout: 10))
-        for _ in 0..<6 where !allRuns.isHittable {
-            app.swipeUp()
-        }
-        allRuns.tap()
+        app.tabBars.buttons["Activités"].tap()
         let row = app.buttons["run-row"].firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 10), "La liste des sorties ne s'ouvre pas")
+        XCTAssertTrue(row.waitForExistence(timeout: 10), "L'onglet Activités n'affiche pas la liste")
         row.tap()
-        XCTAssertTrue(replay.waitForExistence(timeout: 10), "Liste : le détail de la sortie ne s'ouvre pas")
+        XCTAssertTrue(replay.waitForExistence(timeout: 10), "Activités : le détail de la sortie ne s'ouvre pas")
     }
 
     func testCaptureDark() {

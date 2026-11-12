@@ -50,6 +50,13 @@ enum MockData {
             }
         }
 
+        // Une séance de renfo par semaine : activité sans distance ni tracé.
+        for week in 0..<8 {
+            let daysAgo = week * 7 + 5
+            activityId += 1
+            runsByDaysAgo[daysAgo] = makeStrength(in: context, id: activityId, daysAgo: daysAgo, today: today)
+        }
+
         // Métriques quotidiennes des 7 derniers jours.
         for daysAgo in 0..<7 {
             let metric = DailyMetric(dayKey: DayKey.key(DayKey.addDays(-daysAgo, to: today)))
@@ -78,7 +85,7 @@ enum MockData {
         func key(_ offset: Int) -> String { DayKey.key(DayKey.addDays(offset, to: today)) }
 
         add(longRun(key(-7), km: 6.5), status: "done", sync: "sent", daysAgo: 7)
-        add(strength(key(-5)), status: "done")
+        add(strength(key(-5)), status: "done", daysAgo: 5)
         add(easy(key(-4), minutes: 35, km: 5.0), status: "done", sync: "sent", daysAgo: 4)
         add(easy(key(-2), minutes: 35, km: 5.2), status: "done", sync: "sent", daysAgo: 2)
         add(recovery(key(-1)), status: "missed", sync: "sent")
@@ -152,6 +159,24 @@ enum MockData {
             split.avgSpeedMps = 1000 / split.durationS
             run.splits.append(split)
         }
+        return run
+    }
+
+    @MainActor
+    private static func makeStrength(in context: ModelContext, id: Int64, daysAgo: Int, today: Date) -> Run {
+        let start = DayKey.addDays(-daysAgo, to: today).addingTimeInterval(19 * 3600)
+        let durationS = Double(1500 + (daysAgo % 4) * 60)
+        let run = Run(garminActivityId: id, name: "Renfo", startDate: start, activityType: "strength_training",
+                      distanceM: 0, durationS: durationS)
+        context.insert(run)
+        run.movingDurationS = durationS
+        run.avgHR = 108 + (daysAgo % 6)
+        run.maxHR = 139 + (daysAgo % 5)
+        run.calories = (durationS / 60 * 6.2).rounded()
+        run.hrZoneSeconds = [durationS * 0.58, durationS * 0.31, durationS * 0.11, 0, 0]
+        run.edwardsLoad = (durationS / 60 * 1.5).rounded()
+        run.detailState = "complete"
+        run.perceivedEffort = 4
         return run
     }
 

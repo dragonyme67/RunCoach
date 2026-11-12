@@ -5,8 +5,10 @@ import RunCoachCore
 
 /// Replay d'une sortie : carte à plat qui tourne avec le coureur (il avance toujours vers le haut de l'écran).
 /// Pas de relief 3D : les arbres et bâtiments 3D y masquaient le tracé.
-// shortcut: étape 1 = maquette. Horloge simple (sortie entière en 60 s à ×1) et point qui saute d'un relevé
-// au suivant ; l'étape 3 cale la lecture sur l'allure réelle et lisse le déplacement (ARCHITECTURE.md §8).
+/// Fluidité : la position est interpolée entre deux relevés à chaque image, et rien ne bouge sur la carte
+/// sauf la caméra. Le point du coureur est fixe au centre de l'écran, puisque la caméra est centrée sur lui.
+// shortcut: la lecture avance à 30 fois le temps réel sur l'indice des relevés, supposés réguliers ;
+// l'étape 3 la cale sur les horodatages réels si les relevés Garmin ne le sont pas (ARCHITECTURE.md §8).
 struct ReplayView: View {
     let run: Run
     /// 0 = satellite, 1 = plan.
@@ -22,6 +24,7 @@ struct ReplayView: View {
     @State private var streetScene: MKLookAroundScene?
     @State private var showStreet = false
     @State private var noStreet = false
+    @State private var chartPoints: [ChartPoint] = []
 
     private var index: Int {
         guard coordinates.count > 1 else { return 0 }
@@ -36,11 +39,13 @@ struct ReplayView: View {
         .safeAreaInset(edge: .bottom) {
             panel
         }
+        .background { clock }
         .task {
             guard track == nil else { return }
             let loaded = run.loadTrack()
             track = loaded
             coordinates = RouteMap.coordinates(loaded)
+            chartPoints = makeChartPoints()
             updateCamera()
         }
         .onChange(of: progress) {
@@ -49,12 +54,8 @@ struct ReplayView: View {
         .onChange(of: style) {
             updateCamera()
         }
-        .task(id: isPlaying) {
-            while isPlaying, progress < 1, !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(50))
-                progress = min(1, progress + 0.05 / 60 * Double(speed))
-            }
-            if progress >= 1 { isPlaying = false }
+        .onChange(of: metric) {
+            chartPoints = makeChartPoints()
         }
         .lookAroundViewer(isPresented: $showStreet, initialScene: streetScene)
         .alert("Pas de vue de rue ici", isPresented: $noStreet) {
@@ -66,21 +67,38 @@ struct ReplayView: View {
         .sensoryFeedback(.selection, trigger: style)
     }
 
-    private var map: some View {
-        Map(position: $position) {
-            if coordinates.count > 1 {
-                MapPolyline(coordinates: coordinates)
-                    .stroke(Color.white.opacity(0.55), lineWidth: 4)
-                MapPolyline(coordinates: Array(coordinates.prefix(max(2, index + 1))))
-                    .stroke(Color.rc.accent, lineWidth: 5)
-                // Disque posé au sol et non `Annotation` : sur le simulateur iOS 26.5, une `Annotation`
-                // n'apparaît pas quand la carte est inclinée (constat de la CI).
-                MapCircle(center: coordinates[index], radius: 10)
-                    .foregroundStyle(Color.rc.accent)
-                    .stroke(Color.white, lineWidth: 4)
+    /// Horloge de lecture, calée sur le rafraîchissement de l'écran.
+    private var clock: some View {
+        TimelineView(.animation(paused: !isPlaying)) { context in
+            Color.clear.onChange(of: context.date) { old, new in
+                // Borné : à la reprise après une pause, l'écart entre deux dates vaut toute la pause.
+                let elapsedS = min(0.1, new.timeIntervalSince(old))
+                let durationS = max(60, track?.t.last ?? run.durationS)
+                progress = min(1, progress + elapsedS * 30 * Double(speed) / durationS)
+                if progress >= 1 { isPlaying = false }
             }
         }
-        .mapStyle(style == 1 ? .standard(elevation: .flat) : .imagery(elevation: .flat))
+    }
+
+    private var map: some View {
+        ZStack {
+            // Carte non manipulable : la caméra suit le coureur, un geste la décalerait du point fixe.
+            Map(position: $position, interactionModes: []) {
+                if coordinates.count > 1 {
+                    MapPolyline(coordinates: coordinates)
+                        .stroke(Color.white.opacity(0.55), lineWidth: 4)
+                    MapPolyline(coordinates: Array(coordinates.prefix(max(2, index + 1))))
+                        .stroke(Color.rc.accent, lineWidth: 5)
+                }
+            }
+            .mapStyle(style == 1 ? .standard(elevation: .flat) : .imagery(elevation: .flat))
+            Circle()
+                .fill(Color.rc.accent)
+                .frame(width: 26, height: 26)
+                .overlay(Circle().stroke(Color.white, lineWidth: 4))
+                .shadow(radius: 4)
+                .accessibilityHidden(true)
+        }
         .ignoresSafeArea()
     }
 
@@ -152,7 +170,16 @@ struct ReplayView: View {
                 Text("Altitude").tag(2)
             }
             .pickerStyle(.segmented)
-            ReplayChart(points: chartPoints, cursor: Double(index))
+            // Courbe figée et curseur dessiné par-dessus : la courbe n'est pas recalculée à chaque image.
+            ReplayChart(points: chartPoints, xMax: Double(max(1, coordinates.count - 1)))
+                .overlay {
+                    GeometryReader { geo in
+                        Rectangle()
+                            .fill(Color.white.opacity(0.9))
+                            .frame(width: 2)
+                            .offset(x: geo.size.width * progress - 1)
+                    }
+                }
                 .frame(height: 70)
         }
     }
@@ -189,7 +216,7 @@ struct ReplayView: View {
 
     // MARK: - Données
 
-    private var chartPoints: [ChartPoint] {
+    private func makeChartPoints() -> [ChartPoint] {
         let column: [Double]?
         switch metric {
         case 1: column = track?.hr
@@ -218,12 +245,12 @@ struct ReplayView: View {
     }
 
     private func updateCamera() {
-        guard coordinates.count > 1 else { return }
+        guard coordinates.count > 1, let pose = track?.pose(at: progress) else { return }
         // Cap = sens de la course : le coureur avance vers le haut de l'écran. Légère inclinaison, vue « derrière lui ».
         position = .camera(MapCamera(
-            centerCoordinate: coordinates[index],
+            centerCoordinate: CLLocationCoordinate2D(latitude: pose.lat, longitude: pose.lon),
             distance: 600,
-            heading: track?.heading(at: index) ?? 0,
+            heading: pose.heading,
             // Plan vu du dessus : incliné, il affiche des arbres 3D qui recouvrent le point (constat de la CI).
             pitch: style == 1 ? 0 : 45
         ))
@@ -236,10 +263,10 @@ struct ChartPoint: Identifiable {
     var id: Double { x }
 }
 
-/// Courbe sans axes avec un curseur vertical à la position courante.
+/// Courbe sans axes, sur toute la largeur (`x` de 0 à `xMax`).
 struct ReplayChart: View {
     let points: [ChartPoint]
-    let cursor: Double
+    let xMax: Double
 
     var body: some View {
         Chart {
@@ -248,11 +275,10 @@ struct ReplayChart: View {
                     .foregroundStyle(Color.rc.accent)
                     .interpolationMethod(.catmullRom)
             }
-            RuleMark(x: .value("Position", cursor))
-                .foregroundStyle(Color.white.opacity(0.9))
         }
         .chartXAxis(.hidden)
         .chartYAxis(.hidden)
+        .chartXScale(domain: 0...xMax)
         .chartYScale(domain: .automatic(includesZero: false))
         .accessibilityLabel("Courbe de la sortie")
     }

@@ -12,7 +12,9 @@ struct RunDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.l) {
-                mapHeader
+                if run.track != nil {
+                    mapHeader
+                }
                 summary
                 tiles
                 if run.hrZoneSeconds.count == 5 {
@@ -75,14 +77,19 @@ struct RunDetailView: View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             Text(run.startDate.formatted(.dateTime.weekday(.wide).day().month(.wide).hour().minute().locale(Locale(identifier: "fr_FR"))))
                 .rcLabel()
-            HeroNumber(value: Fmt.km(run.distanceM), unit: "km")
-            HStack(spacing: Spacing.xl) {
-                Label(Fmt.duration(run.durationS), systemImage: "clock")
-                Label(Fmt.pace(sPerKm: run.paceSPerKm) + " /km", systemImage: "speedometer")
+            if run.distanceM > 0 {
+                HeroNumber(value: Fmt.km(run.distanceM), unit: "km")
+                HStack(spacing: Spacing.xl) {
+                    Label(Fmt.duration(run.durationS), systemImage: "clock")
+                    Label(Fmt.pace(sPerKm: run.paceSPerKm) + " /km", systemImage: "speedometer")
+                }
+                .font(.title3.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(Color.rc.textPrimary)
+            } else {
+                // Activité sans distance (renfo) : la durée devient le chiffre principal.
+                HeroNumber(value: Fmt.duration(run.durationS))
             }
-            .font(.title3.weight(.semibold))
-            .monospacedDigit()
-            .foregroundStyle(Color.rc.textPrimary)
         }
     }
 
@@ -132,6 +139,10 @@ struct RunDetailView: View {
                 .font(.subheadline)
                 .monospacedDigit()
                 .foregroundStyle(Color.rc.textSecondary)
+            if let exercises = planned.spec?.exercises, !exercises.isEmpty {
+                ExerciseList(exercises: exercises, color: planned.kindValue.color)
+                    .padding(.top, Spacing.s)
+            }
         }
         .rcCard()
     }
@@ -141,7 +152,7 @@ struct RunDetailView: View {
         if let km = planned.estimatedDistanceKm {
             text += ", " + Fmt.decimal(km, decimals: 1) + " km"
         }
-        return text + " · Fait : " + Fmt.km(run.distanceM, decimals: 1) + " km"
+        return text + " · Fait : " + (run.distanceM > 0 ? Fmt.km(run.distanceM, decimals: 1) + " km" : Fmt.duration(run.durationS))
     }
 }
 

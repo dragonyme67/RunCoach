@@ -2,7 +2,8 @@ import Foundation
 import SwiftData
 import RunCoachCore
 
-/// Une activité importée de Garmin. Tout champ venant de Garmin est optionnel.
+/// Une activité importée de Garmin : course, mais aussi renforcement (sans distance ni tracé).
+/// Tout champ venant de Garmin est optionnel.
 @Model
 final class Run {
     @Attribute(.unique) var garminActivityId: Int64
@@ -60,6 +61,10 @@ final class Run {
 
     var paceSPerKm: Double {
         distanceM > 0 ? durationS / (distanceM / 1000) : 0
+    }
+
+    var isStrength: Bool {
+        activityType == "strength_training"
     }
 
     var sortedSplits: [Split] {

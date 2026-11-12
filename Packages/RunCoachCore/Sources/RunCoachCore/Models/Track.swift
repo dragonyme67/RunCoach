@@ -48,6 +48,24 @@ public struct Track: Codable, Equatable, Sendable {
         return degrees < 0 ? degrees + 360 : degrees
     }
 
+    /// Position et cap à la fraction `progress` (0 à 1) du tracé, interpolés entre deux relevés :
+    /// le replay glisse au lieu de sauter d'un point au suivant.
+    public func pose(at progress: Double) -> (lat: Double, lon: Double, heading: Double) {
+        let n = min(lat.count, lon.count)
+        guard n > 1 else { return (lat.first ?? 0, lon.first ?? 0, 0) }
+        let position = max(0, min(1, progress)) * Double(n - 1)
+        let i = min(n - 2, Int(position))
+        let f = position - Double(i)
+        // Plus court chemin angulaire : de 350° à 10° on passe par 0°, pas par 180°.
+        let from = heading(at: i)
+        let turn = (heading(at: i + 1) - from + 540).truncatingRemainder(dividingBy: 360) - 180
+        return (
+            lat[i] + (lat[i + 1] - lat[i]) * f,
+            lon[i] + (lon[i + 1] - lon[i]) * f,
+            (from + turn * f + 360).truncatingRemainder(dividingBy: 360)
+        )
+    }
+
     /// Vrai si toutes les colonnes présentes ont la même longueur.
     public var isConsistent: Bool {
         let n = t.count

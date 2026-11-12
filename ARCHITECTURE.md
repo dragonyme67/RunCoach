@@ -309,7 +309,7 @@ Insérer un objet dans le `ModelContext` **avant** de toucher à ses relations.
 | `name` | String | |
 | `startDate` | Date | UTC |
 | `dayKey` | String | Jour local `yyyy-MM-dd` |
-| `activityType` | String | `typeKey` Garmin (`running`, `trail_running`, `treadmill_running`, …) |
+| `activityType` | String | `typeKey` Garmin (`running`, `trail_running`, `treadmill_running`, `strength_training`, …). Le renfo n'a ni distance ni tracé. |
 | `distanceM`, `durationS` | Double | |
 | `movingDurationS` | Double? | |
 | `avgSpeedMps`, `maxSpeedMps` | Double? | |
@@ -1077,7 +1077,7 @@ La couleur n'est jamais le seul porteur d'information : chaque type a aussi une 
 | `EmptyState(icon:title:message:action:)` | État vide |
 
 ### 7.3 Navigation
-`TabView` à 4 onglets, dans l'ordre : **Aujourd'hui** (`sun.max.fill`), **Plan** (`calendar`), **Coach** (`bubble.left.and.bubble.right.fill`), **Progrès** (`chart.line.uptrend.xyaxis`).
+`TabView` à 5 onglets, dans l'ordre : **Aujourd'hui** (`sun.max.fill`), **Plan** (`calendar`), **Activités** (`figure.run`), **Coach** (`bubble.left.and.bubble.right.fill`), **Progrès** (`chart.line.uptrend.xyaxis`).
 - Réglages : bouton avatar en haut à droite d'Aujourd'hui, ouvert en feuille (action rare).
 - Détail d'une sortie et détail d'une séance planifiée : poussés dans la pile de navigation de l'onglet courant.
 - Replay : `fullScreenCover` depuis le détail d'une sortie.
@@ -1148,7 +1148,11 @@ Tout est modifiable ensuite dans Réglages → Profil ; une modification qui tou
 - Volume hebdomadaire : barres des 12 dernières semaines, ligne du volume prévu.
 - Tendance d'allure : allure moyenne des footings, par semaine.
 - Charge : aiguë et chronique, zone de prudence colorée.
-- Lien « Toutes les sorties » : liste chronologique, recherche par mois.
+- Répartition du temps par zone FC sur 4 semaines (`ZoneBreakdown`).
+
+**Activités** (onglet, ajouté le 2026-11-13 : l'utilisateur voulait un accès direct) — information principale : la liste.
+- Liste chronologique de toutes les activités, course et renfo (`RunListView`, lignes `RunRow`). Une activité sans distance affiche sa durée et sa FC moyenne.
+- Toucher une ligne ouvre `RunDetailView` ; sans tracé, ni carte ni bouton Rejouer.
 
 **Réglages** (feuille)
 - Profil et objectif (tous les champs de l'onboarding).
@@ -1176,6 +1180,7 @@ Règles communes à toutes les étapes :
 | Risques | Image du runner macOS et version de Xcode inconnues ; quota de minutes macOS ; blocage du sideloading gratuit par Apple. |
 
 ### Étape 2 — Connexion Garmin et import
+> Ajout du 2026-11-13 (demande de l'utilisateur) : importer **toutes** les activités, pas seulement la course. Une séance de renfo (`activityType` = `strength_training`) est un `Run` sans distance, sans tracé et sans splits ; l'onglet Activités et `RunDetailView` l'affichent déjà (durée en chiffre principal, FC, calories, zones, exercices de la séance prévue liée). Les séries réellement faites (exercice, répétitions, charge) viendraient de `/activity-service/activity/{id}/exerciseSets` **[À VÉRIFIER étape 2]** ; sans elles, on montre les exercices prévus.
 | | |
 |---|---|
 | Tâches | **2.0 Validation préalable sur le PC (avant tout code Swift)** : avec Python 3.12 et `pip install garminconnect curl_cffi`, un script de 30 lignes se connecte au compte de l'utilisateur, liste 3 activités, crée un workout de test, le planifie à demain, vérifie qu'il arrive sur la Forerunner 745 après synchro, puis le supprime. Si cette validation échoue, s'arrêter et revoir §1 avec l'utilisateur. Profiter de cette session pour enregistrer des réponses JSON réelles hors du dépôt, et en tirer des fixtures **synthétiques** (§9.4). 2.1 `GarminIdentity`, `GarminAuth` (échange, rafraîchissement à vol unique), `KeychainTokenStore`. 2.2 `GarminLoginView` et ses trois crochets de capture. 2.3 `GarminAPI`, DTO, conversion des détails en `Track`. 2.4 `SyncEngine` (backfill, incrémental, backoff), `BackgroundSync`. 2.5 Branchement des écrans sur les données réelles ; le mode factice reste disponible. |
@@ -1184,7 +1189,7 @@ Règles communes à toutes les étapes :
 | Risques | Capture du ticket dans le WKWebView (repli §5.1.2 bis) ; jeu d'en-têtes `ios` refusé (repli `android`) ; noms de champs JSON différents de ceux du §5.2 ; blocage 429 pendant les essais (respecter §5.1.6) ; MFA. |
 
 ### Étape 3 — Replay sur carte
-> Mis à jour le 2026-11-12 après le test de l'utilisateur : carte à plat, cap dans le sens de la course, vue de rue. La maquette de l'étape 1 (`ReplayView`) fait déjà tout cela avec une horloge simple (sortie entière en 60 s à ×1) et un point qui saute d'un relevé au suivant. Reste pour l'étape 3 : horloge calée sur l'allure réelle, interpolation, caméra lissée. Là où le tableau ci-dessous dit `.realistic` ou 60°, lire `.flat` et 45°.
+> Mis à jour le 2026-11-13 après deux tests de l'utilisateur. La maquette de l'étape 1 (`ReplayView`) fait déjà : carte à plat, cap dans le sens de la course, vue de rue, lecture à 30 fois le temps réel, position et cap interpolés à chaque image (`Track.pose(at:)`, testé). Pour la fluidité, rien ne bouge sur la carte sauf la caméra : le point du coureur est une vue fixe au centre de l'écran (la caméra est centrée sur lui), la carte n'est pas manipulable, la courbe est figée et son curseur dessiné par-dessus. **Ne pas remettre le point dans le contenu de la carte** : mis à jour à chaque image, il saccadait. Reste pour l'étape 3 : caler la lecture sur les horodatages réels si les relevés Garmin ne sont pas réguliers, sélection au doigt sur la courbe, mini-cartes, et le plan B `MKMapView` si l'utilisateur trouve encore le suivi saccadé sur l'iPhone. Là où le tableau ci-dessous dit `.realistic`, 60° ou `MapCircle`, lire `.flat`, 45° et point fixe.
 | | |
 |---|---|
 | Tâches | 3.1 `ReplayClock` : temps d'activité = temps réel × `baseTimeScale` × multiplicateur. `baseTimeScale = 30` (une sortie de 35 min dure 70 s en ×1), constante réglable. Le point suit les horodatages réels : il accélère et ralentit comme le coureur. 3.2 `TrackInterpolator` : recherche dichotomique dans `Track.t`, interpolation linéaire de la position et des stats. 3.3 `CameraPath` : cap lissé calculé sur les 100 m à venir (moyenne glissante pour éviter les à-coups), inclinaison 60°, distance 700 m. 3.4 `ReplayMap` : `Map(position:)` avec `.mapStyle(.imagery(elevation: .realistic))`, `MapPolyline` pour le tracé complet et pour la partie parcourue, `MapCircle` pour le point (pas d'`Annotation`, voir §9.1), bascule de style déjà en place dans `ReplayView`. Mise à jour de la caméra à 30 Hz. Décaler le centre de la caméra pour que le point reste au-dessus du panneau de stats. 3.5 `ReplayChart` (Swift Charts, 500 points au plus, `RuleMark` à la position courante, sélection au doigt qui déplace la lecture). 3.6 `ReplayControls`. 3.7 Mini-cartes de tracé dans Aujourd'hui et le détail. |
@@ -1233,7 +1238,7 @@ Règles communes à toutes les étapes :
 - **Constats de la CI à l'étape 1 (simulateur iOS 26.5, Xcode 26.6), à confirmer sur l'iPhone à l'étape 3 :**
   - Une `Annotation` SwiftUI n'apparaît pas quand la carte est en relief 3D et inclinée (absente ou masquée par le relief, cause non établie) ; elle s'affiche correctement à plat. Le point du coureur est donc un `MapCircle` (posé au sol, placé comme le tracé).
   - En relief 3D, tout ce qui est posé au sol (tracé, point) est **masqué par les arbres et les bâtiments 3D**. Confirmé sur l'iPhone le 2026-11-12 (« de temps en temps on ne voit plus le tracé ») : le relief 3D a été retiré du replay, qui n'utilise plus que `.flat`.
-- **Navigation** : dans une `NavigationStack`, ne jamais mélanger `NavigationLink { vue }` et `NavigationLink(value:)`. Sur l'iPhone, toucher une sortie dans la liste (ouverte par un lien à vue) rouvrait la liste au lieu du détail. Tous les liens passent par une valeur (`Route` pour les écrans sans donnée) ; `testOpenRunShowsItsDetail` couvre ce parcours.
+- **Navigation** : dans une `NavigationStack`, ne jamais mélanger `NavigationLink { vue }` et `NavigationLink(value:)`. Sur l'iPhone, toucher une sortie dans la liste (ouverte par un lien à vue) rouvrait la liste au lieu du détail. Tous les liens d'une pile qui a des destinations par valeur passent par une valeur ; `testOpenRunShowsItsDetail` couvre l'ouverture d'une sortie depuis l'accueil et depuis l'onglet Activités.
 - **Look Around** : `MKLookAroundSceneRequest` ne renvoie rien loin d'une route couverte par Apple (chemins, forêts, beaucoup de petites communes). Non testé sur l'appareil à l'étape 1.
   - Si ces deux limites gênent sur l'appareil réel : passer à `MKMapView` dans un `UIViewRepresentable` (annotation classique toujours au premier plan, caméra pilotée directement).
 - Le simulateur de la CI ne rend pas fidèlement la carte 3D : le replay se valide sur l'iPhone.

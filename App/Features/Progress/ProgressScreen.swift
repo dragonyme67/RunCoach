@@ -73,24 +73,6 @@ struct ProgressScreen: View {
                     }
                     .rcCard()
                 }
-                NavigationLink(value: Route.runList) {
-                    HStack {
-                        Text("Toutes les sorties")
-                            .font(.headline)
-                            .foregroundStyle(Color.rc.textPrimary)
-                        Spacer()
-                        Text("\(runs.count)")
-                            .font(.rcStat)
-                            .monospacedDigit()
-                            .foregroundStyle(Color.rc.textSecondary)
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Color.rc.textSecondary)
-                    }
-                    .rcCard()
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("all-runs")
             }
             .padding(Spacing.l)
         }
@@ -124,8 +106,9 @@ struct WeekVolume: Identifiable {
             let start = DayKey.addDays(-7 * i, to: thisWeek)
             let end = DayKey.addDays(7, to: start)
             let weekRuns = runs.filter { $0.startDate >= start && $0.startDate < end }
+            // Allure : seulement les activités avec distance, sinon la durée du renfo la fausse.
             let meters = weekRuns.reduce(0) { $0 + $1.distanceM }
-            let seconds = weekRuns.reduce(0) { $0 + $1.durationS }
+            let seconds = weekRuns.filter { $0.distanceM > 0 }.reduce(0) { $0 + $1.durationS }
             let load = weekRuns.reduce(0) { $0 + ($1.edwardsLoad ?? 0) }
             out.append(WeekVolume(
                 start: start,
@@ -186,7 +169,7 @@ struct GoalCard: View {
     }
 }
 
-/// Liste chronologique de toutes les sorties.
+/// Onglet Activités : liste chronologique de toutes les activités (course et renfo).
 struct RunListView: View {
     @Query(sort: \Run.startDate, order: .reverse) private var runs: [Run]
 
@@ -204,7 +187,6 @@ struct RunListView: View {
             .padding(Spacing.l)
         }
         .rcScreenBackground()
-        .navigationTitle("Sorties")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("Activités")
     }
 }

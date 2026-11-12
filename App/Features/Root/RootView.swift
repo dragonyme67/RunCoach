@@ -13,7 +13,7 @@ struct RootView: View {
     }
 }
 
-/// Les 4 onglets. Réglages s'ouvre depuis l'avatar de l'écran Aujourd'hui.
+/// Les 5 onglets. Réglages s'ouvre depuis l'avatar de l'écran Aujourd'hui.
 struct MainTabs: View {
     @State private var selection = 0
 
@@ -25,30 +25,28 @@ struct MainTabs: View {
             NavigationStack { PlanView().rcDestinations() }
                 .tabItem { Label("Plan", systemImage: "calendar") }
                 .tag(1)
+            NavigationStack { RunListView().rcDestinations() }
+                .tabItem { Label("Activités", systemImage: "figure.run") }
+                .tag(2)
             NavigationStack { CoachChatView() }
                 .tabItem { Label("Coach", systemImage: "bubble.left.and.bubble.right.fill") }
-                .tag(2)
+                .tag(3)
             NavigationStack { ProgressScreen().rcDestinations() }
                 .tabItem { Label("Progrès", systemImage: "chart.line.uptrend.xyaxis") }
-                .tag(3)
+                .tag(4)
         }
         .sensoryFeedback(.selection, trigger: selection)
     }
 }
 
-/// Écrans sans donnée associée. Dans une pile, tous les liens passent par une valeur : après un
-/// `NavigationLink { vue }`, un `NavigationLink(value:)` rouvrait la liste au lieu du détail (constat sur iPhone).
-enum Route: Hashable {
-    case runList
-}
-
 extension View {
     /// Destinations communes à toutes les piles de navigation.
+    /// Dans une pile, tous les liens passent par une valeur : après un `NavigationLink { vue }`,
+    /// un `NavigationLink(value:)` rouvrait l'écran précédent au lieu du détail (constat sur iPhone).
     func rcDestinations() -> some View {
         self
             .navigationDestination(for: PlannedWorkout.self) { PlannedWorkoutDetailView(workout: $0) }
             .navigationDestination(for: Run.self) { RunDetailView(run: $0) }
-            .navigationDestination(for: Route.self) { _ in RunListView() }
     }
 }
 
@@ -78,12 +76,18 @@ struct DebugScreen: View {
             }
         case "run":
             NavigationStack {
-                if let run = runs.first { RunDetailView(run: run) }
+                if let run = runs.first(where: { !$0.isStrength }) { RunDetailView(run: run) }
             }
+        case "activity":
+            NavigationStack {
+                if let run = runs.first(where: { $0.isStrength }) { RunDetailView(run: run) }
+            }
+        case "activities":
+            NavigationStack { RunListView().rcDestinations() }
         case "replay":
-            if let run = runs.first { ReplayView(run: run) }
+            if let run = runs.first(where: { !$0.isStrength }) { ReplayView(run: run) }
         case "replaymap":
-            if let run = runs.first { ReplayView(run: run, style: 1) }
+            if let run = runs.first(where: { !$0.isStrength }) { ReplayView(run: run, style: 1) }
         case "coach":
             NavigationStack { CoachChatView() }
         case "progress":

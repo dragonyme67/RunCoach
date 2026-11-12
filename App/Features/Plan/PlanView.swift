@@ -236,25 +236,7 @@ struct PlannedWorkoutDetailView: View {
                 if let spec = spec, !spec.exercises.isEmpty {
                     VStack(alignment: .leading, spacing: Spacing.m) {
                         SectionHeader(title: "Exercices")
-                        ForEach(Array(spec.exercises.enumerated()), id: \.offset) { _, exercise in
-                            HStack(alignment: .top) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(StrengthNames.name(exercise.exerciseId))
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(Color.rc.textPrimary)
-                                    if let note = exercise.note {
-                                        Text(note)
-                                            .font(.caption)
-                                            .foregroundStyle(Color.rc.textSecondary)
-                                    }
-                                }
-                                Spacer()
-                                Text(volume(exercise))
-                                    .font(.subheadline.weight(.semibold))
-                                    .monospacedDigit()
-                                    .foregroundStyle(kind.color)
-                            }
-                        }
+                        ExerciseList(exercises: spec.exercises, color: kind.color)
                     }
                     .rcCard()
                 }
@@ -265,6 +247,37 @@ struct PlannedWorkoutDetailView: View {
         .rcScreenBackground()
         .navigationTitle(kind.label)
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// Exercices d'une séance de renfo : nom, consigne, séries × répétitions.
+/// Partagé par le détail d'une séance planifiée et le détail d'une activité de renfo.
+struct ExerciseList: View {
+    let exercises: [StrengthExercise]
+    let color: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.m) {
+            ForEach(Array(exercises.enumerated()), id: \.offset) { _, exercise in
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(StrengthNames.name(exercise.exerciseId))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.rc.textPrimary)
+                        if let note = exercise.note {
+                            Text(note)
+                                .font(.caption)
+                                .foregroundStyle(Color.rc.textSecondary)
+                        }
+                    }
+                    Spacer()
+                    Text(volume(exercise))
+                        .font(.subheadline.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(color)
+                }
+            }
+        }
     }
 
     private func volume(_ exercise: StrengthExercise) -> String {
