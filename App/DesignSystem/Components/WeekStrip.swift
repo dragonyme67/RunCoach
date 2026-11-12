@@ -75,39 +75,52 @@ struct RingProgress: View {
     }
 }
 
-/// Barre horizontale empilée des 5 zones de fréquence cardiaque.
-struct ZoneBar: View {
+/// Temps passé dans chacune des 5 zones de fréquence cardiaque : une barre par zone, de la plus intense à la plus douce.
+struct ZoneBreakdown: View {
     /// Secondes passées dans chaque zone, 5 valeurs.
     let seconds: [Double]
 
     var body: some View {
         let total = max(1, seconds.reduce(0, +))
-        VStack(alignment: .leading, spacing: Spacing.s) {
-            GeometryReader { geo in
-                HStack(spacing: 2) {
-                    ForEach(Array(seconds.enumerated()), id: \.offset) { index, value in
-                        if value > 0 {
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(Color.rc.zone(index + 1))
-                                .frame(width: max(3, geo.size.width * value / total - 2))
-                        }
-                    }
-                }
-            }
-            .frame(height: 14)
-            HStack(spacing: Spacing.m) {
-                ForEach(Array(seconds.enumerated()), id: \.offset) { index, value in
-                    HStack(spacing: 3) {
-                        Circle().fill(Color.rc.zone(index + 1)).frame(width: 7, height: 7)
-                        Text("Z\(index + 1) \(Int((value / total * 100).rounded())) %")
-                            .font(.caption2)
+        let longest = max(1, seconds.max() ?? 1)
+        let dominant = (seconds.firstIndex(of: longest) ?? 0) + 1
+        VStack(alignment: .leading, spacing: Spacing.m) {
+            Text("Surtout en zone \(dominant) · \(Color.rc.zoneName(dominant))")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.rc.textPrimary)
+            ForEach(Array(seconds.enumerated()).reversed(), id: \.offset) { index, value in
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    HStack(spacing: Spacing.s) {
+                        Text("Z\(index + 1)")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Color.rc.textPrimary)
+                        Text(Color.rc.zoneName(index + 1))
+                            .font(.caption)
+                            .foregroundStyle(Color.rc.textSecondary)
+                        Spacer()
+                        Text(Fmt.duration(value))
+                            .font(.subheadline.weight(.semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(Color.rc.textPrimary)
+                        Text("\(Int((value / total * 100).rounded())) %")
+                            .font(.caption)
                             .monospacedDigit()
                             .foregroundStyle(Color.rc.textSecondary)
+                            .frame(width: 40, alignment: .trailing)
                     }
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.rc.surfaceRaised)
+                            Capsule()
+                                .fill(Color.rc.zone(index + 1))
+                                .frame(width: value > 0 ? max(10, geo.size.width * value / longest) : 0)
+                        }
+                    }
+                    .frame(height: 10)
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Zone \(index + 1), \(Color.rc.zoneName(index + 1)), \(Fmt.duration(value)), \(Int((value / total * 100).rounded())) pour cent")
             }
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Répartition du temps par zone de fréquence cardiaque")
     }
 }

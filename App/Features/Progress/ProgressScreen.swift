@@ -66,9 +66,14 @@ struct ProgressScreen: View {
                     .accessibilityLabel("Charge d'entraînement par semaine")
                 }
                 .rcCard()
-                NavigationLink {
-                    RunListView()
-                } label: {
+                if recentZoneSeconds.contains(where: { $0 > 0 }) {
+                    VStack(alignment: .leading, spacing: Spacing.m) {
+                        SectionHeader(title: "Zones cardiaques · 4 semaines")
+                        ZoneBreakdown(seconds: recentZoneSeconds)
+                    }
+                    .rcCard()
+                }
+                NavigationLink(value: Route.runList) {
                     HStack {
                         Text("Toutes les sorties")
                             .font(.headline)
@@ -85,11 +90,22 @@ struct ProgressScreen: View {
                     .rcCard()
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("all-runs")
             }
             .padding(Spacing.l)
         }
         .rcScreenBackground()
         .navigationTitle("Progrès")
+    }
+
+    /// Temps cumulé par zone sur les 28 derniers jours.
+    private var recentZoneSeconds: [Double] {
+        let since = DayKey.addDays(-28, to: Date())
+        var sum = [Double](repeating: 0, count: 5)
+        for run in runs where run.startDate >= since && run.hrZoneSeconds.count == 5 {
+            for i in 0..<5 { sum[i] += run.hrZoneSeconds[i] }
+        }
+        return sum
     }
 }
 
@@ -182,6 +198,7 @@ struct RunListView: View {
                         RunRow(run: run)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("run-row")
                 }
             }
             .padding(Spacing.l)

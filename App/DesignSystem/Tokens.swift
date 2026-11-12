@@ -11,22 +11,29 @@ struct RCColors {
     let textPrimary = Color(light: 0x0B0D10, dark: 0xF5F7FA)
     let textSecondary = Color(light: 0x5B6470, dark: 0x9AA3AF)
     /// Aplats uniquement : bouton principal, anneau, point du replay.
-    let accent = Color(hex: 0xC6F432)
+    let accent = Color(hex: 0xFF6A1F)
+    /// Texte sombre sur l'orange : le blanc n'y atteint pas le contraste minimal.
     let onAccent = Color(hex: 0x0B0D10)
     /// Texte ou icône en couleur d'accent : assombri en mode clair pour le contraste.
-    let accentText = Color(light: 0x4D7A00, dark: 0xC6F432)
+    let accentText = Color(light: 0xC2410C, dark: 0xFF6A1F)
     let danger = Color(light: 0xD92D4B, dark: 0xF43F5E)
-    let warning = Color(light: 0xC2410C, dark: 0xFB923C)
+    /// Jaune et non orange, pour ne pas se confondre avec l'accent.
+    let warning = Color(light: 0xA16207, dark: 0xFACC15)
 
-    /// Zones de fréquence cardiaque, de 1 à 5.
+    /// Zones de fréquence cardiaque, de 1 à 5 (mêmes familles de couleur que Garmin).
     func zone(_ number: Int) -> Color {
         switch number {
-        case 1: return Color(hex: 0x94A3B8)
-        case 2: return Color(hex: 0x60A5FA)
-        case 3: return Color(hex: 0x34D399)
-        case 4: return Color(hex: 0xFB923C)
-        default: return Color(hex: 0xF43F5E)
+        case 1: return Color(hex: 0x8B95A5)
+        case 2: return Color(hex: 0x3B82F6)
+        case 3: return Color(hex: 0x10B981)
+        case 4: return Color(hex: 0xF59E0B)
+        default: return Color(hex: 0xEF4444)
         }
+    }
+
+    /// Nom des zones tel que Garmin les affiche.
+    func zoneName(_ number: Int) -> String {
+        ["Échauffement", "Facile", "Aérobie", "Seuil", "Maximum"][max(1, min(5, number)) - 1]
     }
 }
 
@@ -55,11 +62,11 @@ extension WorkoutKind {
         switch self {
         case .easy: return Color(hex: 0x34D399)
         case .long: return Color(hex: 0x60A5FA)
-        case .tempo: return Color(hex: 0xFB923C)
+        case .tempo: return Color(hex: 0xF59E0B)
         case .intervals: return Color(hex: 0xF43F5E)
         case .recovery: return Color(hex: 0x2DD4BF)
         case .strength: return Color(hex: 0xA78BFA)
-        case .race: return Color(hex: 0xC6F432)
+        case .race: return Color(hex: 0xFF6A1F)
         }
     }
 

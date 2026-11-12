@@ -6,7 +6,7 @@ struct WelcomePage: View {
         OnboardingPage(
             icon: "figure.run",
             title: "RunCoach",
-            subtitle: "Ton coach de course à pied : un plan qui s'adapte à toi, tes séances sur ta montre, tes sorties rejouées en 3D."
+            subtitle: "Ton coach de course à pied : un plan qui s'adapte à toi, tes séances sur ta montre, tes sorties rejouées sur la carte."
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 Label("Quelques questions pour te connaître", systemImage: "person.fill.questionmark")

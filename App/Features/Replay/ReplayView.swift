@@ -3,12 +3,13 @@ import MapKit
 import Charts
 import RunCoachCore
 
-/// Replay d'une sortie sur carte satellite 3D.
-// shortcut: étape 1 = maquette. La barre de progression déplace le point et les stats ;
-// la lecture animée (horloge, caméra lissée) arrive à l'étape 3 (ARCHITECTURE.md §8).
+/// Replay d'une sortie : carte à plat qui tourne avec le coureur (il avance toujours vers le haut de l'écran).
+/// Pas de relief 3D : les arbres et bâtiments 3D y masquaient le tracé.
+// shortcut: étape 1 = maquette. Horloge simple (sortie entière en 60 s à ×1) et point qui saute d'un relevé
+// au suivant ; l'étape 3 cale la lecture sur l'allure réelle et lisse le déplacement (ARCHITECTURE.md §8).
 struct ReplayView: View {
     let run: Run
-    /// 0 = satellite avec relief 3D, 1 = satellite à plat, 2 = plan.
+    /// 0 = satellite, 1 = plan.
     @State var style = 0
     @Environment(\.dismiss) private var dismiss
     @State private var track: Track?
@@ -18,6 +19,9 @@ struct ReplayView: View {
     @State private var speed = 1
     @State private var metric = 0
     @State private var position: MapCameraPosition = .automatic
+    @State private var streetScene: MKLookAroundScene?
+    @State private var showStreet = false
+    @State private var noStreet = false
 
     private var index: Int {
         guard coordinates.count > 1 else { return 0 }
@@ -45,6 +49,19 @@ struct ReplayView: View {
         .onChange(of: style) {
             updateCamera()
         }
+        .task(id: isPlaying) {
+            while isPlaying, progress < 1, !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(50))
+                progress = min(1, progress + 0.05 / 60 * Double(speed))
+            }
+            if progress >= 1 { isPlaying = false }
+        }
+        .lookAroundViewer(isPresented: $showStreet, initialScene: streetScene)
+        .alert("Pas de vue de rue ici", isPresented: $noStreet) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Apple n'a des images qu'au bord des routes où ses voitures sont passées.")
+        }
         .sensoryFeedback(.selection, trigger: speed)
         .sensoryFeedback(.selection, trigger: style)
     }
@@ -57,50 +74,51 @@ struct ReplayView: View {
                 MapPolyline(coordinates: Array(coordinates.prefix(max(2, index + 1))))
                     .stroke(Color.rc.accent, lineWidth: 5)
                 // Disque posé au sol et non `Annotation` : sur le simulateur iOS 26.5, une `Annotation`
-                // n'apparaît pas quand la carte est en relief 3D et inclinée (constat de la CI, visible à plat).
-                MapCircle(center: coordinates[index], radius: 12)
+                // n'apparaît pas quand la carte est inclinée (constat de la CI).
+                MapCircle(center: coordinates[index], radius: 10)
                     .foregroundStyle(Color.rc.accent)
                     .stroke(Color.white, lineWidth: 4)
             }
         }
-        .mapStyle(mapStyle)
+        .mapStyle(style == 1 ? .standard(elevation: .flat) : .imagery(elevation: .flat))
         .ignoresSafeArea()
     }
 
-    private var mapStyle: MapStyle {
-        switch style {
-        case 1: return .imagery(elevation: .flat)
-        case 2: return .standard(elevation: .realistic)
-        default: return .imagery(elevation: .realistic)
-        }
-    }
-
     private var closeButton: some View {
-        HStack {
-            Button {
+        HStack(spacing: Spacing.s) {
+            mapButton("xmark", label: "Fermer") {
                 dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.headline)
-                    .foregroundStyle(Color.white)
-                    .frame(width: 44, height: 44)
-                    .background(.ultraThinMaterial, in: Circle())
             }
-            .accessibilityLabel("Fermer")
             Spacer()
-            Button {
-                style = (style + 1) % 3
-            } label: {
-                Image(systemName: style == 0 ? "view.3d" : (style == 1 ? "globe.europe.africa.fill" : "map.fill"))
-                    .font(.headline)
-                    .foregroundStyle(Color.white)
-                    .frame(width: 44, height: 44)
-                    .background(.ultraThinMaterial, in: Circle())
+            mapButton("binoculars.fill", label: "Vue de la rue à cet endroit") {
+                isPlaying = false
+                Task { await openStreet() }
             }
-            .accessibilityLabel("Style de carte")
-            .accessibilityValue(style == 0 ? "Satellite 3D" : (style == 1 ? "Satellite à plat" : "Plan"))
+            mapButton(style == 0 ? "globe.europe.africa.fill" : "map.fill", label: "Style de carte") {
+                style = (style + 1) % 2
+            }
+            .accessibilityValue(style == 0 ? "Satellite" : "Plan")
         }
         .padding(.horizontal, Spacing.l)
+    }
+
+    private func mapButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.headline)
+                .foregroundStyle(Color.white)
+                .frame(width: 44, height: 44)
+                .background(.ultraThinMaterial, in: Circle())
+        }
+        .accessibilityLabel(label)
+    }
+
+    /// Ouvre la vue de rue d'Apple (Look Around) au point courant, si Apple a des images à proximité.
+    private func openStreet() async {
+        guard coordinates.count > 1 else { return }
+        streetScene = try? await MKLookAroundSceneRequest(coordinate: coordinates[index]).scene
+        showStreet = streetScene != nil
+        noStreet = streetScene == nil
     }
 
     private var panel: some View {
@@ -154,6 +172,7 @@ struct ReplayView: View {
                 .frame(width: 150)
                 Spacer()
                 Button {
+                    if progress >= 1 { progress = 0 }
                     isPlaying.toggle()
                 } label: {
                     Image(systemName: isPlaying ? "pause.fill" : "play.fill")
@@ -200,7 +219,13 @@ struct ReplayView: View {
 
     private func updateCamera() {
         guard coordinates.count > 1 else { return }
-        position = .camera(MapCamera(centerCoordinate: coordinates[index], distance: 900, heading: 0, pitch: style == 1 ? 0 : 60))
+        // Cap = sens de la course : le coureur avance vers le haut de l'écran. Légère inclinaison, vue « derrière lui ».
+        position = .camera(MapCamera(
+            centerCoordinate: coordinates[index],
+            distance: 600,
+            heading: track?.heading(at: index) ?? 0,
+            pitch: 45
+        ))
     }
 }
 

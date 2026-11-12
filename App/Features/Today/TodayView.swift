@@ -43,6 +43,7 @@ struct TodayView: View {
                         RunRow(run: run)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("run-row")
                 }
             }
             .padding(Spacing.l)

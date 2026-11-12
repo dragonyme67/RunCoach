@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import Charts
 import RunCoachCore
 
 /// Détail d'une sortie. Information principale : distance et allure.
@@ -17,10 +18,18 @@ struct RunDetailView: View {
                 if run.hrZoneSeconds.count == 5 {
                     VStack(alignment: .leading, spacing: Spacing.m) {
                         SectionHeader(title: "Zones cardiaques")
-                        ZoneBar(seconds: run.hrZoneSeconds)
+                        ZoneBreakdown(seconds: run.hrZoneSeconds)
                     }
                     .rcCard()
                 }
+                // shortcut: une allure à l'arrêt est plafonnée à 16:40 /km pour ne pas écraser la courbe ;
+                // à revoir à l'étape 2 avec de vraies sorties (pauses, feux rouges).
+                TrackChart(title: "Allure", summary: "moy. " + Fmt.pace(sPerKm: run.paceSPerKm) + " /km",
+                           points: series(track?.speed) { 1000 / max($0, 1) }, isPace: true)
+                TrackChart(title: "Fréquence cardiaque", summary: run.avgHR.map { "moy. \($0) bpm" } ?? "",
+                           points: series(track?.hr))
+                TrackChart(title: "Altitude", summary: run.elevationGainM.map { "D+ \(Int($0.rounded())) m" } ?? "",
+                           points: series(track?.ele), isFilled: true)
                 if !run.splits.isEmpty {
                     SplitsCard(splits: run.sortedSplits)
                 }
@@ -106,6 +115,15 @@ struct RunDetailView: View {
         }
     }
 
+    /// Une colonne du tracé en fonction de la distance (km), réduite à 120 points environ.
+    private func series(_ column: [Double]?, transform: (Double) -> Double = { $0 }) -> [ChartPoint] {
+        guard let track = track, let values = column else { return [] }
+        let n = min(values.count, track.dist.count)
+        return stride(from: 0, to: n, by: max(1, n / 120)).map {
+            ChartPoint(x: track.dist[$0] / 1000, y: transform(values[$0]))
+        }
+    }
+
     private func plannedCard(_ planned: PlannedWorkout) -> some View {
         VStack(alignment: .leading, spacing: Spacing.s) {
             SectionHeader(title: "Séance prévue")
@@ -154,6 +172,66 @@ struct RouteMap: View {
     }
 }
 
+/// Courbe d'une mesure le long de la sortie, avec sa moyenne en pointillé. Masquée sans données.
+struct TrackChart: View {
+    let title: String
+    let summary: String
+    /// `x` en km.
+    let points: [ChartPoint]
+    /// Valeurs en s/km : axe inversé (plus haut = plus rapide) et libellés en min:s.
+    var isPace = false
+    var isFilled = false
+
+    var body: some View {
+        if points.count > 1 {
+            let mean = points.reduce(0) { $0 + $1.y } / Double(points.count)
+            let low = points.map { $0.y }.min() ?? 0
+            VStack(alignment: .leading, spacing: Spacing.m) {
+                HStack(alignment: .firstTextBaseline) {
+                    SectionHeader(title: title)
+                    Spacer()
+                    Text(summary)
+                        .font(.subheadline.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(Color.rc.textSecondary)
+                }
+                Chart {
+                    ForEach(points) { point in
+                        if isFilled {
+                            AreaMark(x: .value("km", point.x), yStart: .value("Base", low), yEnd: .value(title, point.y))
+                                .foregroundStyle(Color.rc.accentText.opacity(0.2))
+                                .interpolationMethod(.catmullRom)
+                        }
+                        LineMark(x: .value("km", point.x), y: .value(title, point.y))
+                            .foregroundStyle(Color.rc.accentText)
+                            .interpolationMethod(.catmullRom)
+                    }
+                    if !isFilled {
+                        RuleMark(y: .value("Moyenne", mean))
+                            .foregroundStyle(Color.rc.textSecondary)
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    }
+                }
+                .chartYScale(domain: .automatic(includesZero: false, reversed: isPace))
+                .chartYAxis {
+                    AxisMarks { value in
+                        AxisGridLine()
+                        AxisValueLabel {
+                            if let number = value.as(Double.self) {
+                                Text(isPace ? Fmt.pace(sPerKm: number) : "\(Int(number.rounded()))")
+                            }
+                        }
+                    }
+                }
+                .chartXAxisLabel("km")
+                .frame(height: 130)
+                .accessibilityLabel("\(title) le long de la sortie, \(summary)")
+            }
+            .rcCard()
+        }
+    }
+}
+
 /// Splits par kilomètre : barres dont la longueur suit l'allure.
 struct SplitsCard: View {
     let splits: [Split]
@@ -163,6 +241,15 @@ struct SplitsCard: View {
         let fastest = splits.map { $0.paceSPerKm }.min() ?? 0
         VStack(alignment: .leading, spacing: Spacing.s) {
             SectionHeader(title: "Par kilomètre")
+            HStack(spacing: Spacing.m) {
+                Text("km").frame(width: 22, alignment: .trailing)
+                Spacer()
+                Text("allure").frame(width: 48, alignment: .trailing)
+                Text("FC").frame(width: 34, alignment: .trailing)
+            }
+            .font(.caption2)
+            .foregroundStyle(Color.rc.textSecondary)
+            .accessibilityHidden(true)
             ForEach(splits) { split in
                 HStack(spacing: Spacing.m) {
                     Text("\(split.index)")

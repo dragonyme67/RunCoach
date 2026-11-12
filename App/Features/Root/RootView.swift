@@ -36,12 +36,19 @@ struct MainTabs: View {
     }
 }
 
+/// Écrans sans donnée associée. Dans une pile, tous les liens passent par une valeur : après un
+/// `NavigationLink { vue }`, un `NavigationLink(value:)` rouvrait la liste au lieu du détail (constat sur iPhone).
+enum Route: Hashable {
+    case runList
+}
+
 extension View {
     /// Destinations communes à toutes les piles de navigation.
     func rcDestinations() -> some View {
         self
             .navigationDestination(for: PlannedWorkout.self) { PlannedWorkoutDetailView(workout: $0) }
             .navigationDestination(for: Run.self) { RunDetailView(run: $0) }
+            .navigationDestination(for: Route.self) { _ in RunListView() }
     }
 }
 
@@ -75,7 +82,7 @@ struct DebugScreen: View {
             }
         case "replay":
             if let run = runs.first { ReplayView(run: run) }
-        case "replayflat":
+        case "replaymap":
             if let run = runs.first { ReplayView(run: run, style: 1) }
         case "coach":
             NavigationStack { CoachChatView() }

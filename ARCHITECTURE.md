@@ -16,7 +16,7 @@ App iPhone personnelle de suivi et de planification de course à pied, pilotée 
 - Import automatique des séances Garmin (Forerunner 745 via Garmin Connect).
 - Coach IA : génère et adapte le plan, explique chaque séance, propose du renforcement, discute en langage naturel.
 - Envoi automatique des séances planifiées sur la montre (workouts structurés).
-- Replay de chaque sortie sur carte satellite 3D, à une vitesse proportionnelle à l'allure réelle.
+- Replay de chaque sortie sur carte satellite à plat qui tourne avec le coureur, à une vitesse proportionnelle à l'allure réelle.
 - Calendrier, progression vers l'objectif.
 
 Utilisateur de référence (sert aux données factices et aux exemples) : 21 ans, court depuis 3 semaines, 5 km à 6:30/km, objectif semi-marathon le dimanche 16 mai 2027 en moins de 2 h (5:41/km). Au 12 novembre 2026 il reste 26 semaines. **Rien de tout cela n'est codé en dur** : tout vient de l'écran Profil rempli au premier lancement.
@@ -1029,14 +1029,14 @@ Sombre d'abord, calme, une seule couleur vive. Les chiffres sont les héros : gr
 | `separator` | `#2A2F37` | `#E3E5EA` | Filets |
 | `textPrimary` | `#F5F7FA` | `#0B0D10` | |
 | `textSecondary` | `#9AA3AF` | `#5B6470` | |
-| `accent` | `#C6F432` | `#C6F432` | Aplats : bouton principal, anneau, point du replay |
-| `onAccent` | `#0B0D10` | `#0B0D10` | Texte sur aplat `accent` |
-| `accentText` | `#C6F432` | `#4D7A00` | Texte ou icône en couleur d'accent (contraste en clair) |
+| `accent` | `#FF6A1F` | `#FF6A1F` | Aplats : bouton principal, anneau, point du replay. Orange, choisi par l'utilisateur le 2026-11-12 (il a refusé le vert fluo d'origine). |
+| `onAccent` | `#0B0D10` | `#0B0D10` | Texte sur aplat `accent` (sombre : le blanc sur cet orange n'a que 2,9:1 de contraste) |
+| `accentText` | `#FF6A1F` | `#C2410C` | Texte ou icône en couleur d'accent (contraste en clair) |
 | `danger` | `#F43F5E` | `#D92D4B` | Erreurs, alerte douleur |
-| `warning` | `#FB923C` | `#C2410C` | |
+| `warning` | `#FACC15` | `#A16207` | Jaune, pour ne pas se confondre avec l'accent |
 
-Types de séance (`WorkoutKind.color`) : `easy` `#34D399` · `long` `#60A5FA` · `tempo` `#FB923C` · `intervals` `#F43F5E` · `recovery` `#2DD4BF` · `strength` `#A78BFA` · `race` `#C6F432`.
-Zones FC 1 à 5 : `#94A3B8`, `#60A5FA`, `#34D399`, `#FB923C`, `#F43F5E`.
+Types de séance (`WorkoutKind.color`) : `easy` `#34D399` · `long` `#60A5FA` · `tempo` `#F59E0B` · `intervals` `#F43F5E` · `recovery` `#2DD4BF` · `strength` `#A78BFA` · `race` `#FF6A1F`.
+Zones FC 1 à 5 : `#8B95A5`, `#3B82F6`, `#10B981`, `#F59E0B`, `#EF4444` (familles de couleur de Garmin ; toujours accompagnées de « Z1 » à « Z5 » et du nom de la zone).
 La couleur n'est jamais le seul porteur d'information : chaque type a aussi une icône et un libellé.
 
 **Typographie** (`Typography.swift`) : police système uniquement, styles de texte dynamiques (Dynamic Type), jamais de taille fixe.
@@ -1120,14 +1120,17 @@ Tout est modifiable ensuite dans Réglages → Profil ; une modification qui tou
 - En-tête : mini-carte du tracé (touchable), gros bouton **Rejouer** superposé.
 - Chiffre héros : distance ; dessous : durée et allure moyenne.
 - Grille de `StatTile` : FC moyenne, cadence, dénivelé, calories, température, VO2max, charge.
-- `ZoneBar` des zones FC.
+- `ZoneBreakdown` des zones FC : une barre par zone (Z5 en haut), nom, temps, pourcentage, zone dominante en tête.
+- Trois courbes `TrackChart` le long de la sortie (axe en km) : allure avec moyenne en pointillé, FC avec moyenne, altitude.
 - Splits : barres horizontales par km, longueur proportionnelle à l'allure, FC en regard.
 - Séance prévue correspondante et écart (« Prévu : footing 5 km · Fait : 5,2 km »).
 - Ressenti (1 à 10) et note, modifiables.
 
 **Replay** — plein écran, information principale : le point qui avance.
-- Carte en fond sur tout l'écran : satellite avec relief 3D ; tracé complet en blanc translucide, partie parcourue en accent, point accent avec halo.
-- Haut : bouton Fermer, bascule de style de carte (3D satellite / satellite à plat / plan).
+- Carte en fond sur tout l'écran : satellite **à plat** (pas de relief 3D, refusé par l'utilisateur le 2026-11-12 : il masquait le tracé) ; tracé complet en blanc translucide, partie parcourue en accent, point accent.
+- La carte **tourne avec le coureur** : le cap de la caméra suit le sens de la course (`Track.heading(at:)`), le coureur avance toujours vers le haut de l'écran. Inclinaison 45°, distance 600 m.
+- Haut : bouton Fermer ; bouton jumelles = vue de rue d'Apple (Look Around) au point courant, message si Apple n'a pas d'image à cet endroit ; bascule satellite / plan.
+- Une vue « Street View » continue qui suit le coureur n'est pas faisable : Google Street View exige un SDK tiers et une clé payante, et Look Around ne fournit que des images fixes au bord des routes couvertes.
 - Bandeau flottant bas, en verre dépoli : 6 stats qui défilent (allure, FC, cadence, altitude, distance, temps), en `statNumber`.
 - Courbe sous les stats : sélecteur allure / FC / altitude, curseur vertical à la position courante.
 - Contrôles tout en bas : lecture / pause (gros bouton central), vitesse ×1 / ×2 / ×4, barre de progression à faire glisser.
@@ -1180,7 +1183,8 @@ Règles communes à toutes les étapes :
 | Validation | Tests Core : décodage des fixtures, colonnes résolues par clé, rafraîchissement concurrent = un seul appel, backoff. Sur l'iPhone : connexion réussie, sorties des 90 derniers jours importées avec tracé et splits, nouvelle sortie visible après ouverture de l'app, session conservée après redémarrage. |
 | Risques | Capture du ticket dans le WKWebView (repli §5.1.2 bis) ; jeu d'en-têtes `ios` refusé (repli `android`) ; noms de champs JSON différents de ceux du §5.2 ; blocage 429 pendant les essais (respecter §5.1.6) ; MFA. |
 
-### Étape 3 — Replay carte 3D
+### Étape 3 — Replay sur carte
+> Mis à jour le 2026-11-12 après le test de l'utilisateur : carte à plat, cap dans le sens de la course, vue de rue. La maquette de l'étape 1 (`ReplayView`) fait déjà tout cela avec une horloge simple (sortie entière en 60 s à ×1) et un point qui saute d'un relevé au suivant. Reste pour l'étape 3 : horloge calée sur l'allure réelle, interpolation, caméra lissée. Là où le tableau ci-dessous dit `.realistic` ou 60°, lire `.flat` et 45°.
 | | |
 |---|---|
 | Tâches | 3.1 `ReplayClock` : temps d'activité = temps réel × `baseTimeScale` × multiplicateur. `baseTimeScale = 30` (une sortie de 35 min dure 70 s en ×1), constante réglable. Le point suit les horodatages réels : il accélère et ralentit comme le coureur. 3.2 `TrackInterpolator` : recherche dichotomique dans `Track.t`, interpolation linéaire de la position et des stats. 3.3 `CameraPath` : cap lissé calculé sur les 100 m à venir (moyenne glissante pour éviter les à-coups), inclinaison 60°, distance 700 m. 3.4 `ReplayMap` : `Map(position:)` avec `.mapStyle(.imagery(elevation: .realistic))`, `MapPolyline` pour le tracé complet et pour la partie parcourue, `MapCircle` pour le point (pas d'`Annotation`, voir §9.1), bascule de style déjà en place dans `ReplayView`. Mise à jour de la caméra à 30 Hz. Décaler le centre de la caméra pour que le point reste au-dessus du panneau de stats. 3.5 `ReplayChart` (Swift Charts, 500 points au plus, `RuleMark` à la position courante, sélection au doigt qui déplace la lecture). 3.6 `ReplayControls`. 3.7 Mini-cartes de tracé dans Aujourd'hui et le détail. |
@@ -1228,7 +1232,9 @@ Règles communes à toutes les étapes :
 - **MapKit 3D** : `.imagery(elevation: .realistic)` donne le satellite drapé sur le relief. Les bâtiments en 3D photoréaliste n'existent que dans certaines villes. Pas de cartes hors ligne. Mettre à jour la caméra à chaque image peut saccader (plan B à l'étape 3).
 - **Constats de la CI à l'étape 1 (simulateur iOS 26.5, Xcode 26.6), à confirmer sur l'iPhone à l'étape 3 :**
   - Une `Annotation` SwiftUI n'apparaît pas quand la carte est en relief 3D et inclinée (absente ou masquée par le relief, cause non établie) ; elle s'affiche correctement à plat. Le point du coureur est donc un `MapCircle` (posé au sol, placé comme le tracé).
-  - En relief 3D, tout ce qui est posé au sol (tracé, point) est **masqué par les arbres et les bâtiments 3D**. En forêt ou en ville dense le tracé disparaît par endroits. D'où la bascule de style du replay (3D, satellite à plat, plan) : le mode à plat ne masque rien.
+  - En relief 3D, tout ce qui est posé au sol (tracé, point) est **masqué par les arbres et les bâtiments 3D**. Confirmé sur l'iPhone le 2026-11-12 (« de temps en temps on ne voit plus le tracé ») : le relief 3D a été retiré du replay, qui n'utilise plus que `.flat`.
+- **Navigation** : dans une `NavigationStack`, ne jamais mélanger `NavigationLink { vue }` et `NavigationLink(value:)`. Sur l'iPhone, toucher une sortie dans la liste (ouverte par un lien à vue) rouvrait la liste au lieu du détail. Tous les liens passent par une valeur (`Route` pour les écrans sans donnée) ; `testOpenRunShowsItsDetail` couvre ce parcours.
+- **Look Around** : `MKLookAroundSceneRequest` ne renvoie rien loin d'une route couverte par Apple (chemins, forêts, beaucoup de petites communes). Non testé sur l'appareil à l'étape 1.
   - Si ces deux limites gênent sur l'appareil réel : passer à `MKMapView` dans un `UIViewRepresentable` (annotation classique toujours au premier plan, caméra pilotée directement).
 - Le simulateur de la CI ne rend pas fidèlement la carte 3D : le replay se valide sur l'iPhone.
 - `WKWebView` : pas de partage de session avec Safari ; l'User-Agent par défaut ne doit pas être modifié.

@@ -1,6 +1,6 @@
 # RunCoach — CLAUDE.md
 
-App iPhone personnelle de course à pied : import Garmin, coach IA, envoi des séances sur la montre, replay 3D.
+App iPhone personnelle de course à pied : import Garmin, coach IA, envoi des séances sur la montre, replay sur carte.
 **Lis `ARCHITECTURE.md` en entier avant de coder.** C'est la référence unique ; ce fichier n'en est que le résumé.
 Si un fait d'`ARCHITECTURE.md` s'avère faux, corrige-le là-bas dans le même changement.
 
@@ -43,7 +43,7 @@ Si un fait d'`ARCHITECTURE.md` s'avère faux, corrige-le là-bas dans le même c
 | 0 | Architecture (`ARCHITECTURE.md`) | fait le 2026-11-12 |
 | 1 | Squelette, design system, données factices, CI, première installation | code fait et CI verte le 2026-11-12 ; reste l'installation sur l'iPhone et la validation du design par l'utilisateur |
 | 2 | Connexion Garmin et import. **Commencer par la validation 2.0 sur le PC.** | à faire |
-| 3 | Replay carte 3D et stats animées | à faire |
+| 3 | Replay sur carte à plat orientée dans le sens de la course, stats animées | à faire |
 | 4 | Coach IA, génération et adaptation du plan, chat | à faire |
 | 5 | Envoi des séances sur la montre | à faire |
 | 6 | Finitions, notifications, tests | à faire |
