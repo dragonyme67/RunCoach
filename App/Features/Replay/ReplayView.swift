@@ -224,7 +224,8 @@ struct ReplayView: View {
             centerCoordinate: coordinates[index],
             distance: 600,
             heading: track?.heading(at: index) ?? 0,
-            pitch: 45
+            // Plan vu du dessus : incliné, il affiche des arbres 3D qui recouvrent le point (constat de la CI).
+            pitch: style == 1 ? 0 : 45
         ))
     }
 }

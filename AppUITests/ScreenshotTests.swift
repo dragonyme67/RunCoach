@@ -53,6 +53,15 @@ final class ScreenshotTests: XCTestCase {
             attachment.name = "\(screen)-\(scheme)"
             attachment.lifetime = .keepAlways
             add(attachment)
+            // Écrans longs : captures supplémentaires en faisant défiler, pour voir les graphiques du bas.
+            for page in 0..<(["run": 3, "progress": 2][screen] ?? 0) {
+                app.swipeUp()
+                Thread.sleep(forTimeInterval: 1.5)
+                let more = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+                more.name = "\(screen)\(page + 2)-\(scheme)"
+                more.lifetime = .keepAlways
+                add(more)
+            }
             app.terminate()
         }
     }
