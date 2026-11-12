@@ -56,17 +56,11 @@ struct ReplayView: View {
                     .stroke(Color.white.opacity(0.55), lineWidth: 4)
                 MapPolyline(coordinates: Array(coordinates.prefix(max(2, index + 1))))
                     .stroke(Color.rc.accent, lineWidth: 5)
-                // Disque posé sur le sol : placé comme le tracé, mais masqué par les arbres en relief 3D.
-                MapCircle(center: coordinates[index], radius: 9)
+                // Disque posé au sol et non `Annotation` : sur le simulateur iOS 26.5, une `Annotation` est
+                // projetée au mauvais endroit dès que la carte est en relief 3D et inclinée (constat de la CI).
+                MapCircle(center: coordinates[index], radius: 12)
                     .foregroundStyle(Color.rc.accent)
-                    .stroke(Color.white, lineWidth: 3)
-                // Repère à l'écran : toujours visible. Sa position en relief 3D est à valider sur iPhone (étape 3).
-                Annotation("", coordinate: coordinates[index]) {
-                    Circle()
-                        .fill(Color.rc.accent)
-                        .frame(width: 18, height: 18)
-                        .overlay(Circle().stroke(Color.white, lineWidth: 3))
-                }
+                    .stroke(Color.white, lineWidth: 4)
             }
         }
         .mapStyle(mapStyle)

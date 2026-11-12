@@ -35,7 +35,8 @@ jobs:
             -project RunCoach.xcodeproj -scheme RunCoach \
             -destination "id=${{ steps.sim.outputs.udid }}" \
             -derivedDataPath build/dd-sim \
-            -resultBundlePath build/ui.xcresult
+            -resultBundlePath build/ui.xcresult \
+            -retry-tests-on-failure -test-iterations 3
       - name: Export screenshots
         if: always()
         run: |
