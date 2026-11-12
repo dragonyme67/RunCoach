@@ -1227,7 +1227,7 @@ Règles communes à toutes les étapes :
 - SwiftData et concurrence : un `ModelContext` par acteur ; ne jamais passer une entité d'un contexte à un autre, passer son identifiant.
 - **MapKit 3D** : `.imagery(elevation: .realistic)` donne le satellite drapé sur le relief. Les bâtiments en 3D photoréaliste n'existent que dans certaines villes. Pas de cartes hors ligne. Mettre à jour la caméra à chaque image peut saccader (plan B à l'étape 3).
 - **Constats de la CI à l'étape 1 (simulateur iOS 26.5, Xcode 26.6), à confirmer sur l'iPhone à l'étape 3 :**
-  - Une `Annotation` SwiftUI est projetée au mauvais endroit quand la carte est en relief 3D et inclinée ; elle est correcte à plat. Le point du coureur est donc un `MapCircle` (posé au sol, placé comme le tracé).
+  - Une `Annotation` SwiftUI n'apparaît pas quand la carte est en relief 3D et inclinée (absente ou masquée par le relief, cause non établie) ; elle s'affiche correctement à plat. Le point du coureur est donc un `MapCircle` (posé au sol, placé comme le tracé).
   - En relief 3D, tout ce qui est posé au sol (tracé, point) est **masqué par les arbres et les bâtiments 3D**. En forêt ou en ville dense le tracé disparaît par endroits. D'où la bascule de style du replay (3D, satellite à plat, plan) : le mode à plat ne masque rien.
   - Si ces deux limites gênent sur l'appareil réel : passer à `MKMapView` dans un `UIViewRepresentable` (annotation classique toujours au premier plan, caméra pilotée directement).
 - Le simulateur de la CI ne rend pas fidèlement la carte 3D : le replay se valide sur l'iPhone.

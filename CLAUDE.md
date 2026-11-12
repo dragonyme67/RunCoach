@@ -40,8 +40,8 @@ Si un fait d'`ARCHITECTURE.md` s'avère faux, corrige-le là-bas dans le même c
 ## Plan
 | Étape | Contenu | État |
 |---|---|---|
-| 0 | Architecture (`ARCHITECTURE.md`) | fait le 2026-11-12, design à valider par l'utilisateur |
-| 1 | Squelette, design system, données factices, CI, première installation | à faire |
+| 0 | Architecture (`ARCHITECTURE.md`) | fait le 2026-11-12 |
+| 1 | Squelette, design system, données factices, CI, première installation | code fait et CI verte le 2026-11-12 ; reste l'installation sur l'iPhone et la validation du design par l'utilisateur |
 | 2 | Connexion Garmin et import. **Commencer par la validation 2.0 sur le PC.** | à faire |
 | 3 | Replay carte 3D et stats animées | à faire |
 | 4 | Coach IA, génération et adaptation du plan, chat | à faire |

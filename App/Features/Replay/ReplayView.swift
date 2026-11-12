@@ -56,8 +56,8 @@ struct ReplayView: View {
                     .stroke(Color.white.opacity(0.55), lineWidth: 4)
                 MapPolyline(coordinates: Array(coordinates.prefix(max(2, index + 1))))
                     .stroke(Color.rc.accent, lineWidth: 5)
-                // Disque posé au sol et non `Annotation` : sur le simulateur iOS 26.5, une `Annotation` est
-                // projetée au mauvais endroit dès que la carte est en relief 3D et inclinée (constat de la CI).
+                // Disque posé au sol et non `Annotation` : sur le simulateur iOS 26.5, une `Annotation`
+                // n'apparaît pas quand la carte est en relief 3D et inclinée (constat de la CI, visible à plat).
                 MapCircle(center: coordinates[index], radius: 12)
                     .foregroundStyle(Color.rc.accent)
                     .stroke(Color.white, lineWidth: 4)
