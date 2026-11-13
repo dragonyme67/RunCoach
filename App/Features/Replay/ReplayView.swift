@@ -4,17 +4,15 @@ import Charts
 import RunCoachCore
 
 /// Replay d'une sortie : carte qui tourne avec le coureur (il avance toujours vers le haut de l'écran).
-/// Par défaut, vue inclinée en relief avec le tracé dessiné par-dessus (`TrackOverlay`, prototype 3.0) :
-/// posé sur la carte, il disparaissait sous les arbres et bâtiments 3D. Modes à plat : tracé posé sur la carte.
-/// Fluidité : la position est interpolée entre deux relevés à chaque image, et rien ne bouge sur la carte
-/// sauf la caméra.
+/// Par défaut, vue inclinée en relief ; le tracé est dessiné par-dessus la carte (`ReplayMapView`) :
+/// posé sur la carte, il disparaissait sous les arbres et bâtiments 3D.
+/// Fluidité : la position est interpolée entre deux relevés à chaque image.
 // shortcut: la lecture avance à 30 fois le temps réel sur l'indice des relevés, supposés réguliers ;
 // l'étape 3 la cale sur les horodatages réels si les relevés Garmin ne le sont pas (ARCHITECTURE.md §8).
 struct ReplayView: View {
     let run: Run
-    /// 0 = incliné en relief (prototype 3.0, tracé en surimpression), 1 = satellite à plat, 2 = plan.
+    /// 0 = incliné en relief, 1 = satellite à plat, 2 = plan.
     @State var style = 0
-    @State private var cameraTick = 0
     /// Indices des points dessinés en surimpression : un tous les 12 m environ.
     @State private var overlayIndices: [Int] = []
     @Environment(\.dismiss) private var dismiss
@@ -24,7 +22,6 @@ struct ReplayView: View {
     @State private var isPlaying = false
     @State private var speed = 1
     @State private var metric = 0
-    @State private var position: MapCameraPosition = .automatic
     @State private var streetScene: MKLookAroundScene?
     @State private var showStreet = false
     @State private var noStreet = false
@@ -51,13 +48,6 @@ struct ReplayView: View {
             coordinates = RouteMap.coordinates(loaded)
             overlayIndices = Self.overlayIndices(loaded?.dist ?? [], stepM: 12)
             chartPoints = makeChartPoints()
-            updateCamera()
-        }
-        .onChange(of: progress) {
-            updateCamera()
-        }
-        .onChange(of: style) {
-            updateCamera()
         }
         .onChange(of: metric) {
             chartPoints = makeChartPoints()
@@ -85,49 +75,20 @@ struct ReplayView: View {
         }
     }
 
+    @ViewBuilder
     private var map: some View {
-        MapReader { proxy in
-            ZStack {
-                // Carte non manipulable : la caméra suit le coureur, un geste la décalerait du point fixe.
-                Map(position: $position, interactionModes: []) {
-                    if coordinates.count > 1 && style != 0 {
-                        MapPolyline(coordinates: coordinates)
-                            .stroke(Color.white.opacity(0.55), lineWidth: 4)
-                        MapPolyline(coordinates: Array(coordinates.prefix(max(2, index + 1))))
-                            .stroke(Color.rc.accent, lineWidth: 5)
-                    }
-                }
-                .mapStyle(mapStyle)
-                // Pas de boussole : elle chevauchait les boutons, et la carte tourne de toute façon avec le coureur.
-                .mapControls {}
-                // La surimpression se recale sur la caméra réellement affichée, pas sur celle demandée.
-                .onMapCameraChange(frequency: .continuous) { cameraTick &+= 1 }
-                if style == 0, let track {
-                    let pose = track.pose(at: progress)
-                    TrackOverlay(proxy: proxy,
-                                 coordinates: overlayIndices.map { coordinates[$0] },
-                                 distances: overlayIndices.map { track.dist[$0] },
-                                 currentDistM: currentDistM,
-                                 runner: CLLocationCoordinate2D(latitude: pose.lat, longitude: pose.lon),
-                                 cameraTick: cameraTick)
-                } else {
-                    Circle()
-                        .fill(Color.rc.accent)
-                        .frame(width: 26, height: 26)
-                        .overlay(Circle().stroke(Color.white, lineWidth: 4))
-                        .shadow(radius: 4)
-                        .accessibilityHidden(true)
-                }
-            }
-        }
-        .ignoresSafeArea()
-    }
-
-    private var mapStyle: MapStyle {
-        switch style {
-        case 0: return .hybrid(elevation: .realistic, pointsOfInterest: .excludingAll)
-        case 1: return .imagery(elevation: .flat)
-        default: return .standard(elevation: .flat)
+        if let track, coordinates.count > 1 {
+            let pose = track.pose(at: progress)
+            ReplayMapView(coordinates: overlayIndices.map { coordinates[$0] },
+                          distances: overlayIndices.map { track.dist[$0] },
+                          currentDistM: currentDistM,
+                          runner: CLLocationCoordinate2D(latitude: pose.lat, longitude: pose.lon),
+                          heading: pose.heading,
+                          style: style)
+                .ignoresSafeArea()
+                .accessibilityHidden(true)
+        } else {
+            Color.rc.background.ignoresSafeArea()
         }
     }
 
@@ -292,18 +253,6 @@ struct ReplayView: View {
     private func number(_ column: [Double]?) -> String {
         guard let column = column, index < column.count else { return "–" }
         return "\(Int(column[index].rounded()))"
-    }
-
-    private func updateCamera() {
-        guard coordinates.count > 1, let pose = track?.pose(at: progress) else { return }
-        // Cap = sens de la course : le coureur avance vers le haut de l'écran.
-        // Incliné : vue « derrière lui » à 60°. À plat et plan : du dessus (le plan incliné affiche des arbres 3D).
-        position = .camera(MapCamera(
-            centerCoordinate: CLLocationCoordinate2D(latitude: pose.lat, longitude: pose.lon),
-            distance: style == 0 ? 500 : 600,
-            heading: pose.heading,
-            pitch: style == 0 ? 60 : 0
-        ))
     }
 }
 
