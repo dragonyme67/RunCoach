@@ -122,7 +122,8 @@ struct RunDetailView: View {
             if let load = run.edwardsLoad {
                 StatTile(label: "Charge", value: "\(Int(load.rounded()))", icon: "bolt.heart.fill")
             }
-            if let effort = run.perceivedEffort {
+            // Renfo : pas de carte de ressenti modifiable, la valeur reste affichée ici.
+            if run.isStrength, let effort = run.perceivedEffort {
                 StatTile(label: "Ressenti", value: "\(effort)", unit: "/ 10", icon: "face.smiling")
             }
         }
