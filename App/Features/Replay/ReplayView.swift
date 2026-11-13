@@ -415,6 +415,7 @@ struct ReplayView: View {
             .buttonStyle(.plain)
             .accessibilityElement(children: .combine)
             .accessibilityHint("Affiche le détail")
+            .accessibilityIdentifier("hud-compact")
             playButton(size: 44)
         }
         .padding(.horizontal, Spacing.l)

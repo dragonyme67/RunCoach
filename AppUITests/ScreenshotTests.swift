@@ -30,14 +30,23 @@ final class ScreenshotTests: XCTestCase {
     /// Replay : les sélecteurs de vitesse et de courbe doivent répondre au toucher
     /// (bug vu sur iPhone : ×2, FC et Altitude ne se sélectionnaient pas).
     func testReplayPickersRespond() {
-        let app = XCUIApplication()
-        app.launchArguments = ["-mockData", "-screen", "replay"]
-        app.launch()
-        for label in ["×2", "FC", "Altitude"] {
-            let button = app.buttons[label].firstMatch
-            XCTAssertTrue(button.waitForExistence(timeout: 10), "\(label) absent")
-            button.tap()
-            XCTAssertTrue(button.isSelected, "\(label) ne se sélectionne pas")
+        for playing in [false, true] {
+            let app = XCUIApplication()
+            app.launchArguments = ["-mockData", "-screen", playing ? "replayplay" : "replay"]
+            app.launch()
+            if playing {
+                // Pendant la lecture : bandeau réduit, on l'ouvre puis on touche les sélecteurs pendant que tout bouge.
+                let hud = app.buttons["hud-compact"]
+                XCTAssertTrue(hud.waitForExistence(timeout: 10), "bandeau réduit absent")
+                hud.tap()
+            }
+            for label in ["×2", "FC", "Altitude"] {
+                let button = app.buttons[label].firstMatch
+                XCTAssertTrue(button.waitForExistence(timeout: 10), "\(label) absent (lecture : \(playing))")
+                button.tap()
+                XCTAssertTrue(button.isSelected, "\(label) ne se sélectionne pas (lecture : \(playing))")
+            }
+            app.terminate()
         }
     }
 
