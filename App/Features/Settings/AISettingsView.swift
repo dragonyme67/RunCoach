@@ -1,45 +1,47 @@
 import SwiftUI
 import RunCoachCore
 
-/// Réglages → Coach IA : clé personnelle (Keychain), modèle, test, et ce que le fournisseur fait des données (§6.7).
+/// Réglages → Coach IA : choix Groq ou Gemini, une clé personnelle par fournisseur (Keychain), modèle, test,
+/// et ce que chaque fournisseur fait des données (§6.7).
 struct AISettingsView: View {
     @Environment(CoachService.self) private var coach
     @State private var key = ""
     @State private var model = ""
-    @State private var baseURL = ""
     @State private var testResult: String?
     @State private var isTesting = false
-    @State private var hasKey = false
 
     var body: some View {
+        @Bindable var coach = coach
         Form {
             Section {
-                SecureField(hasKey ? "Clé enregistrée (la remplacer)" : "Colle ta clé ici", text: $key)
+                Picker("Fournisseur", selection: $coach.providerId) {
+                    ForEach(LLMProvider.presets, id: \.id) { preset in
+                        Text(preset.name).tag(preset.id)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } footer: {
+                Text("Les deux sont gratuits. Chaque fournisseur garde sa propre clé : tu peux changer à tout moment.")
+            }
+
+            Section {
+                SecureField(coach.hasKey ? "Clé enregistrée (la remplacer)" : "Colle ta clé ici", text: $key)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                 Button("Enregistrer la clé") {
                     coach.setKey(key)
                     key = ""
-                    hasKey = coach.hasKey
                     testResult = nil
                 }
                 .disabled(key.trimmingCharacters(in: .whitespaces).isEmpty)
-                if hasKey {
+                if coach.hasKey {
                     Button("Supprimer la clé", role: .destructive) {
                         coach.setKey("")
-                        hasKey = false
                         testResult = nil
                     }
                 }
-            } header: {
-                Text("Clé Mistral")
-            } footer: {
-                Text("Crée-la sur console.mistral.ai (offre gratuite « Experiment »). Elle reste dans le trousseau de l'iPhone, jamais dans le dépôt ni dans un fichier.")
-            }
-
-            Section {
                 Button {
-                    saveProvider()
+                    coach.setModel(model)
                     Task {
                         isTesting = true
                         testResult = await coach.testKey()
@@ -54,37 +56,36 @@ struct AISettingsView: View {
                         }
                     }
                 }
-                .disabled(!hasKey || isTesting)
+                .disabled(!coach.hasKey || isTesting)
                 if let testResult {
                     Text(testResult)
                         .foregroundStyle(Color.rc.textSecondary)
                 }
+            } header: {
+                Text("Clé \(coach.provider.name)")
             } footer: {
-                Text("Envoie une seule question sans aucune donnée personnelle.")
+                Text(keyHelp + " La clé reste dans le trousseau de l'iPhone. Le test n'envoie aucune donnée personnelle.")
             }
 
             Section {
                 TextField("Modèle", text: $model)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                TextField("Adresse de l'API", text: $baseURL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-                Button("Revenir aux valeurs Mistral") {
-                    model = LLMProvider.mistral.model
-                    baseURL = LLMProvider.mistral.baseURL.absoluteString
+                    .onSubmit { coach.setModel(model) }
+                Button("Modèle par défaut") {
+                    model = defaultModel
+                    coach.setModel("")
                 }
             } header: {
                 Text("Modèle")
             } footer: {
-                Text("Par défaut, le modèle le plus capable de Mistral (mistral-large-latest). Change-le seulement si Mistral le retire ou si ton quota gratuit ne le permet pas.")
+                Text("Par défaut : \(defaultModel). Change-le seulement si le fournisseur le retire.")
             }
 
             Section {
-                Text("Le coach reçoit des résumés chiffrés : âge, volumes, allures, charge, sommeil. Jamais ta position, tes tracés, le nom des lieux ni ton prénom.")
-                Text("Avec l'offre gratuite, Mistral peut utiliser tes requêtes pour entraîner ses modèles. Désactive-le : console.mistral.ai, menu Privacy, interrupteur d'entraînement sur les données.")
-                    .foregroundStyle(Color.rc.warning)
+                Text("Le coach reçoit des résumés chiffrés : âge, volumes, allures, bilan de forme, charge, sommeil, séances prévues. Jamais ta position, tes tracés, le nom des lieux ni ton prénom.")
+                Text(dataNotice)
+                    .foregroundStyle(coach.providerId == LLMProvider.gemini.id ? Color.rc.warning : Color.rc.textPrimary)
             } header: {
                 Text("Tes données")
             }
@@ -93,19 +94,29 @@ struct AISettingsView: View {
         .rcScreenBackground()
         .navigationTitle("Coach IA")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            hasKey = coach.hasKey
+        .onAppear { model = coach.provider.model }
+        .onChange(of: coach.providerId) {
             model = coach.provider.model
-            baseURL = coach.provider.baseURL.absoluteString
+            key = ""
+            testResult = nil
         }
-        .onDisappear { saveProvider() }
+        .onDisappear { coach.setModel(model == defaultModel ? "" : model) }
     }
 
-    /// Adresse en https seulement : la clé ne part jamais en clair.
-    private func saveProvider() {
-        let name = model.trimmingCharacters(in: .whitespaces)
-        if let url = URL(string: baseURL.trimmingCharacters(in: .whitespaces)), url.scheme == "https", !name.isEmpty {
-            coach.provider = LLMProvider(baseURL: url, model: name)
-        }
+    private var defaultModel: String {
+        (LLMProvider.presets.first { $0.id == coach.providerId } ?? .groq).model
+    }
+
+    private var keyHelp: String {
+        coach.providerId == LLMProvider.gemini.id
+            ? "Crée-la sur aistudio.google.com, rubrique « Get API key »."
+            : "Crée-la sur console.groq.com, rubrique « API Keys »."
+    }
+
+    /// Vérifié dans les pages officielles le 2026-11-13 (ARCHITECTURE.md §6.7).
+    private var dataNotice: String {
+        coach.providerId == LLMProvider.gemini.id
+            ? "Gemini : en Europe, Google n'utilise pas tes requêtes pour entraîner ses modèles, même en gratuit. Mais ses conditions réservent l'API à un usage professionnel (« not for consumer use ») et demandent l'offre payante pour une app proposée à des utilisateurs en Europe : un usage personnel reste une zone grise, à toi de décider."
+            : "Groq : tes requêtes ne sont pas conservées par défaut, sauf des journaux techniques de 30 jours au plus. Pour les couper, active Zero Data Retention : console.groq.com, Settings, Data Controls. Données conservées aux États-Unis."
     }
 }

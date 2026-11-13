@@ -88,7 +88,7 @@ struct SettingsView: View {
                     AISettingsView()
                 } label: {
                     HStack {
-                        Label("Mistral", systemImage: "sparkles")
+                        Label(coach.provider.name, systemImage: "sparkles")
                         Spacer()
                         Text(coach.hasKey ? "Clé enregistrée" : "Aucune clé")
                             .foregroundStyle(Color.rc.textSecondary)

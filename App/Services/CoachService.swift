@@ -8,46 +8,62 @@ import RunCoachCore
 @Observable
 final class CoachService {
     private let container: ModelContainer
-    /// Clé IA : Keychain uniquement (CLAUDE.md).
+    /// Clés IA : Keychain uniquement (CLAUDE.md), une par fournisseur.
     private let keyStore: TokenStore
-    private static let keyName = "apiKey"
 
     private(set) var isGenerating = false
     /// Résumé de la semaine générée, ou raison du repli sur le plan de secours.
     private(set) var notice: String?
+    private(set) var isReplying = false
+    /// Erreur du dernier message du chat (non enregistrée).
+    private(set) var chatError: String?
 
-    /// Copie observable de « une clé est enregistrée » : le Keychain, lui, ne prévient pas les vues.
-    private(set) var hasKey: Bool
+    /// Fournisseur choisi dans Réglages (Groq par défaut). Pas secret : gardé dans les préférences.
+    var providerId: String {
+        didSet {
+            UserDefaults.standard.set(providerId, forKey: "ai.provider")
+            refreshHasKey()
+        }
+    }
+    /// Copie observable de « une clé est enregistrée pour ce fournisseur » : le Keychain ne prévient pas les vues.
+    private(set) var hasKey = false
 
     init(container: ModelContainer, keyStore: TokenStore = KeychainTokenStore(service: "local.runcoach.ai")) {
         self.container = container
         self.keyStore = keyStore
-        self.hasKey = !(keyStore.read(Self.keyName) ?? "").isEmpty
+        let saved = UserDefaults.standard.string(forKey: "ai.provider")
+        self.providerId = LLMProvider.presets.contains { $0.id == saved } ? saved! : LLMProvider.groq.id
+        refreshHasKey()
     }
 
     // MARK: - Réglages
 
-    func setKey(_ key: String) {
-        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        keyStore.write(Self.keyName, trimmed.isEmpty ? nil : trimmed)
-        hasKey = !trimmed.isEmpty
+    private var keyName: String { "apiKey." + providerId }
+
+    private func refreshHasKey() {
+        hasKey = !(keyStore.read(keyName) ?? "").isEmpty
     }
 
-    /// Modèle et adresse : pas secrets, gardés dans les préférences. Défaut : Mistral (choix de l'utilisateur).
+    func setKey(_ key: String) {
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        keyStore.write(keyName, trimmed.isEmpty ? nil : trimmed)
+        refreshHasKey()
+    }
+
+    /// Préréglage du fournisseur choisi, avec le modèle éventuellement changé dans Réglages.
     var provider: LLMProvider {
-        get {
-            let defaults = UserDefaults.standard
-            let url = defaults.string(forKey: "ai.baseURL").flatMap(URL.init(string:)) ?? LLMProvider.mistral.baseURL
-            return LLMProvider(baseURL: url, model: defaults.string(forKey: "ai.model") ?? LLMProvider.mistral.model)
-        }
-        set {
-            UserDefaults.standard.set(newValue.baseURL.absoluteString, forKey: "ai.baseURL")
-            UserDefaults.standard.set(newValue.model, forKey: "ai.model")
-        }
+        var preset = LLMProvider.presets.first { $0.id == providerId } ?? .groq
+        if let model = UserDefaults.standard.string(forKey: "ai.model." + providerId), !model.isEmpty { preset.model = model }
+        return preset
+    }
+
+    func setModel(_ model: String) {
+        let trimmed = model.trimmingCharacters(in: .whitespaces)
+        UserDefaults.standard.set(trimmed.isEmpty ? nil : trimmed, forKey: "ai.model." + providerId)
     }
 
     private func client() -> LLMClient? {
-        guard let key = keyStore.read(Self.keyName), !key.isEmpty else { return nil }
+        guard let key = keyStore.read(keyName), !key.isEmpty else { return nil }
         return LLMClient(http: URLSessionHTTPClient(timeoutS: 60), provider: provider, apiKey: key)
     }
 
@@ -131,10 +147,18 @@ final class CoachService {
     }
 
     private func snapshotInput(profile: AthleteProfile, goal: Goal?, context: ModelContext, today: Date) -> SnapshotBuilder.Input {
-        let runs = ((try? context.fetch(FetchDescriptor<Run>())) ?? [])
+        let stored = ((try? context.fetch(FetchDescriptor<Run>())) ?? [])
             .filter { !$0.isStrength && $0.distanceM > 0 && $0.durationS > 0 }
-            .map { RunSummary(date: $0.startDate, distanceM: $0.distanceM, durationS: $0.durationS,
-                              perceivedEffort: $0.perceivedEffort, hrZoneSeconds: $0.hrZoneSeconds, avgHR: $0.avgHR) }
+        func summary(_ run: Run) -> RunSummary {
+            RunSummary(date: run.startDate, distanceM: run.distanceM, durationS: run.durationS,
+                       perceivedEffort: run.perceivedEffort, hrZoneSeconds: run.hrZoneSeconds, avgHR: run.avgHR)
+        }
+        let runs = stored.map(summary)
+        // Tracés des 6 dernières semaines seulement : les décoder coûte, le bilan n'en a pas besoin de plus.
+        let sixWeeksAgo = DayKey.addDays(-43, to: today)
+        let detailed = stored.filter { $0.startDate >= sixWeeksAgo }.map {
+            AnalyzedRun(summary: summary($0), track: $0.loadTrack(), avgCadenceSpm: $0.avgCadenceSpm, elevationGainM: $0.elevationGainM)
+        }
         let weekAgo = DayKey.key(DayKey.addDays(-7, to: today))
         let metrics = ((try? context.fetch(FetchDescriptor<DailyMetric>())) ?? [])
             .filter { $0.dayKey >= weekAgo }
@@ -144,7 +168,7 @@ final class CoachService {
         let missedSince = DayKey.key(DayKey.addDays(-14, to: today))
         let missed = ((try? context.fetch(FetchDescriptor<PlannedWorkout>())) ?? [])
             .filter { $0.status == "missed" && $0.dayKey >= missedSince }.count
-        return SnapshotBuilder.Input(
+        var input = SnapshotBuilder.Input(
             today: today, birthDate: profile.birthDate, sex: profile.sex, runningSince: profile.runningSince,
             injuryNote: profile.injuryNote, currentPain: profile.currentPain, fatigueLevel: profile.fatigueLevel,
             wantsStrength: profile.wantsStrength, strengthEquipment: profile.strengthEquipment,
@@ -158,6 +182,79 @@ final class CoachService {
                 hrvStatus: metrics.last { $0.hrvStatus != nil }?.hrvStatus,
                 restingHr: metrics.last { $0.restingHR != nil }?.restingHR),
             missedLast14d: missed)
+        input.detailedRuns = detailed
+        return input
+    }
+
+    // MARK: - Bilan et chat
+
+    /// Bilan de forme des 6 dernières semaines, pour l'onglet Progrès (nil sans profil ni sortie récente).
+    func analysis() -> FitnessAnalysis? {
+        let context = container.mainContext
+        guard let profile = (try? context.fetch(FetchDescriptor<AthleteProfile>()))?.first else { return nil }
+        let goal = (try? context.fetch(FetchDescriptor<Goal>()))?.first { $0.isActive }
+        return SnapshotBuilder.analysis(snapshotInput(profile: profile, goal: goal, context: context, today: Date()))
+    }
+
+    /// Envoie un message au coach. La réponse est enregistrée ; une douleur ou une fatigue déclarée agit tout de suite
+    /// sur le profil (§6.6), sans attendre de confirmation.
+    func send(_ text: String) async {
+        let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !message.isEmpty, !isReplying else { return }
+        let context = container.mainContext
+        let history = ((try? context.fetch(FetchDescriptor<ChatMessage>(sortBy: [SortDescriptor(\.createdAt)]))) ?? [])
+            .suffix(12).map { LLMMessage(role: $0.role, content: $0.text) }
+        context.insert(ChatMessage(role: "user", text: message))
+        try? context.save()
+        chatError = nil
+        guard let llm = client() else {
+            chatError = LLMError.missingKey.userMessage
+            return
+        }
+        guard let profile = (try? context.fetch(FetchDescriptor<AthleteProfile>()))?.first else {
+            chatError = "Termine d'abord la configuration."
+            return
+        }
+        isReplying = true
+        defer { isReplying = false }
+        let goal = (try? context.fetch(FetchDescriptor<Goal>()))?.first { $0.isActive }
+        let today = Date()
+        let snapshot = SnapshotBuilder.snapshot(snapshotInput(profile: profile, goal: goal, context: context, today: today))
+        let label = today.formatted(.dateTime.weekday(.wide).day().month(.wide).year().locale(Locale(identifier: "fr_FR")))
+        do {
+            let response = try await CoachEngine.chat(llm: llm, todayLabel: label, snapshot: snapshot,
+                                                      upcoming: upcoming(context: context, today: today),
+                                                      history: Array(history), message: message)
+            context.insert(ChatMessage(role: "assistant", text: response.reply))
+            let patch = response.profilePatch
+            if let pain = patch.currentPain { profile.currentPain = pain }
+            if let fatigue = patch.fatigueLevel { profile.fatigueLevel = fatigue }
+            if let note = patch.injuryNote, !note.isEmpty { profile.injuryNote = note }
+            profile.updatedAt = Date()
+            try? context.save()
+        } catch let error as LLMError {
+            chatError = error.userMessage
+        } catch {
+            chatError = LLMError.network.userMessage
+        }
+    }
+
+    /// Séances des 14 prochains jours, détail complet, avec le nom français des exercices de renfo.
+    private func upcoming(context: ModelContext, today: Date) -> String {
+        let from = DayKey.key(today)
+        let to = DayKey.key(DayKey.addDays(14, to: today))
+        let rows: [[String: Any]] = ((try? context.fetch(FetchDescriptor<PlannedWorkout>(sortBy: [SortDescriptor(\.dayKey)]))) ?? [])
+            .filter { $0.dayKey >= from && $0.dayKey <= to && $0.status != "cancelled" }
+            .compactMap { w in
+                guard var spec = (try? JSONSerialization.jsonObject(with: w.specData)) as? [String: Any] else { return nil }
+                spec["status"] = w.status
+                if let exercises = w.spec?.exercises, !exercises.isEmpty {
+                    spec["exercise_names"] = Dictionary(exercises.map { ($0.exerciseId, StrengthNames.name($0.exerciseId)) }) { a, _ in a }
+                }
+                return spec
+            }
+        let data = (try? JSONSerialization.data(withJSONObject: rows)) ?? Data("[]".utf8)
+        return String(decoding: data, as: UTF8.self)
     }
 
     /// Les 14 derniers jours du plan, en JSON compact : date, type, statut, km réalisés.
