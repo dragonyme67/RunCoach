@@ -27,6 +27,20 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(replay.waitForExistence(timeout: 10), "Activités : le détail de la sortie ne s'ouvre pas")
     }
 
+    /// Replay : les sélecteurs de vitesse et de courbe doivent répondre au toucher
+    /// (bug vu sur iPhone : ×2, FC et Altitude ne se sélectionnaient pas).
+    func testReplayPickersRespond() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-mockData", "-screen", "replay"]
+        app.launch()
+        for label in ["×2", "FC", "Altitude"] {
+            let button = app.buttons[label].firstMatch
+            XCTAssertTrue(button.waitForExistence(timeout: 10), "\(label) absent")
+            button.tap()
+            XCTAssertTrue(button.isSelected, "\(label) ne se sélectionne pas")
+        }
+    }
+
     func testCaptureDark() {
         capture(scheme: "dark")
     }

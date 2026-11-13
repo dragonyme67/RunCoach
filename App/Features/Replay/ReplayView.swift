@@ -143,7 +143,7 @@ struct ReplayView: View {
         hudAgeS += elapsedS
         if hudAgeS >= 0.25 {
             hudAgeS = 0
-            withAnimation(.rcStandard) { hudIndex = index }
+            hudIndex = index
         }
         // Le halo bat au rythme réel du cœur à cet endroit, pas à la vitesse de lecture.
         if !reduceMotion, let hr = track.hr, index < hr.count {
@@ -430,7 +430,6 @@ struct ReplayView: View {
                 .font(.rcHeadline)
                 .monospacedDigit()
                 .foregroundStyle(Color.white)
-                .contentTransition(.numericText())
             if !unit.isEmpty {
                 Text(unit)
                     .font(.caption2)
@@ -543,7 +542,6 @@ struct ReplayStat: View {
                     .font(.rcStat)
                     .monospacedDigit()
                     .foregroundStyle(Color.white)
-                    .contentTransition(.numericText())
                 if !unit.isEmpty {
                     Text(unit)
                         .font(.caption2)
