@@ -41,8 +41,10 @@ final class ReplayDirectorTests: XCTestCase {
 
     func testBearingLooksAheadAndHandlesTheEnd() {
         // 100 m vers le nord, puis 100 m vers l'est.
-        let lat = (0...20).map { 48 + Double(min($0, 10)) * 10 / 111_320 }
-        let lon = (0...20).map { 2 + Double(max(0, $0 - 10)) * 10 / (111_320 * cos(48 * .pi / 180)) }
+        let degLat: Double = 10 / 111_320
+        let degLon: Double = degLat / cos(48 * Double.pi / 180)
+        let lat: [Double] = (0...20).map { i in 48 + Double(min(i, 10)) * degLat }
+        let lon: [Double] = (0...20).map { i in 2 + Double(max(0, i - 10)) * degLon }
         let dist = (0...20).map { Double($0) * 10 }
         let track = Track(t: dist, lat: lat, lon: lon, dist: dist)
         XCTAssertEqual(track.bearing(atDistanceM: 0, aheadM: 50), 0, accuracy: 1)
