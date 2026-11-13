@@ -8,6 +8,8 @@ struct RunDetailView: View {
     let run: Run
     @State private var track: Track?
     @State private var showReplay = false
+    /// Point de la sortie sous le doigt (km), pendant un appui prolongé sur une courbe.
+    @State private var selectedKm: Double?
 
     var body: some View {
         ScrollView {
@@ -27,11 +29,12 @@ struct RunDetailView: View {
                 // shortcut: une allure à l'arrêt est plafonnée à 16:40 /km pour ne pas écraser la courbe ;
                 // à revoir à l'étape 2 avec de vraies sorties (pauses, feux rouges).
                 TrackChart(title: "Allure", summary: "moy. " + Fmt.pace(sPerKm: run.paceSPerKm) + " /km",
-                           points: series(track?.speed) { 1000 / max($0, 1) }, isPace: true)
+                           points: series(track?.speed) { 1000 / max($0, 1) }, isPace: true,
+                           selectedKm: $selectedKm, detail: detail(atKm:))
                 TrackChart(title: "Fréquence cardiaque", summary: run.avgHR.map { "moy. \($0) bpm" } ?? "",
-                           points: series(track?.hr))
+                           points: series(track?.hr), selectedKm: $selectedKm, detail: detail(atKm:))
                 TrackChart(title: "Altitude", summary: run.elevationGainM.map { "D+ \(Int($0.rounded())) m" } ?? "",
-                           points: series(track?.ele), isFilled: true)
+                           points: series(track?.ele), isFilled: true, selectedKm: $selectedKm, detail: detail(atKm:))
                 if !run.splits.isEmpty {
                     SplitsCard(splits: run.sortedSplits)
                 }
@@ -131,6 +134,17 @@ struct RunDetailView: View {
         }
     }
 
+    /// « km 3,42 · 21:30 · 6:12 /km · 152 bpm · 45 m » : toutes les mesures au point choisi.
+    private func detail(atKm km: Double) -> String {
+        guard let track, track.dist.count > 1 else { return "" }
+        let i = min(track.dist.count - 1, Int(track.index(atDistanceM: km * 1000).rounded()))
+        var parts = ["km " + Fmt.decimal(km, decimals: 2), Fmt.duration(track.t[i])]
+        if let speed = track.speed?[i] { parts.append(Fmt.pace(sPerKm: 1000 / max(speed, 1)) + " /km") }
+        if let hr = track.hr?[i] { parts.append("\(Int(hr.rounded())) bpm") }
+        if let ele = track.ele?[i] { parts.append("\(Int(ele.rounded())) m") }
+        return parts.joined(separator: " · ")
+    }
+
     private func plannedCard(_ planned: PlannedWorkout) -> some View {
         VStack(alignment: .leading, spacing: Spacing.s) {
             SectionHeader(title: "Séance prévue")
@@ -192,6 +206,9 @@ struct TrackChart: View {
     /// Valeurs en s/km : axe inversé (plus haut = plus rapide) et libellés en min:s.
     var isPace = false
     var isFilled = false
+    /// Appui prolongé puis glissement : le point choisi (km), commun à toutes les courbes de la sortie.
+    @Binding var selectedKm: Double?
+    let detail: (_ atKm: Double) -> String
 
     var body: some View {
         if points.count > 1 {
@@ -206,6 +223,13 @@ struct TrackChart: View {
                         .monospacedDigit()
                         .foregroundStyle(Color.rc.textSecondary)
                 }
+                // Toujours présente (vide hors sélection) : la carte ne change pas de hauteur sous le doigt.
+                Text(selectedKm.map(detail) ?? " ")
+                    .font(.footnote.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.rc.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                 Chart {
                     ForEach(points) { point in
                         if isFilled {
@@ -222,7 +246,31 @@ struct TrackChart: View {
                             .foregroundStyle(Color.rc.textSecondary)
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                     }
+                    if let selectedKm {
+                        RuleMark(x: .value("Point choisi", selectedKm))
+                            .foregroundStyle(Color.rc.textPrimary)
+                            .lineStyle(StrokeStyle(lineWidth: 1.5))
+                    }
                 }
+                .chartOverlay { proxy in
+                    GeometryReader { geo in
+                        // Appui prolongé d'abord : un glissement direct continue de faire défiler la page.
+                        Rectangle().fill(Color.clear).contentShape(Rectangle())
+                            .gesture(
+                                LongPressGesture(minimumDuration: 0.25)
+                                    .sequenced(before: DragGesture(minimumDistance: 0))
+                                    .onChanged { value in
+                                        guard case .second(true, let drag?) = value, let plot = proxy.plotFrame else { return }
+                                        let x = drag.location.x - geo[plot].origin.x
+                                        if let km: Double = proxy.value(atX: x) {
+                                            selectedKm = min(max(km, points.first?.x ?? 0), points.last?.x ?? km)
+                                        }
+                                    }
+                                    .onEnded { _ in selectedKm = nil }
+                            )
+                    }
+                }
+                .sensoryFeedback(.selection, trigger: selectedKm == nil)
                 .chartYScale(domain: .automatic(includesZero: false, reversed: isPace))
                 .chartYAxis {
                     AxisMarks { value in

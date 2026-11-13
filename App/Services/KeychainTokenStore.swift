@@ -2,10 +2,10 @@ import Foundation
 import Security
 import RunCoachCore
 
-/// Jetons Garmin dans le Keychain de l'iPhone (jamais dans UserDefaults, un fichier ou un journal).
+/// Jetons Garmin et clé IA dans le Keychain de l'iPhone (jamais dans UserDefaults, un fichier ou un journal).
 /// `AfterFirstUnlock` : lisibles par la synchro en arrière-plan, téléphone verrouillé.
 struct KeychainTokenStore: TokenStore {
-    private let service = "local.runcoach.garmin"
+    var service = "local.runcoach.garmin"
 
     func read(_ key: String) -> String? {
         var query = base(key)

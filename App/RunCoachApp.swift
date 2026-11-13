@@ -6,6 +6,7 @@ struct RunCoachApp: App {
     private let container: ModelContainer
     private let options: LaunchOptions
     @State private var sync: SyncEngine
+    @State private var coach: CoachService
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -14,6 +15,7 @@ struct RunCoachApp: App {
         self.options = options
         self.container = container
         _sync = State(initialValue: SyncEngine(container: container, store: KeychainTokenStore(), http: URLSessionHTTPClient()))
+        _coach = State(initialValue: CoachService(container: container))
     }
 
     var body: some Scene {
@@ -24,6 +26,7 @@ struct RunCoachApp: App {
                 // Interface en français quelle que soit la langue du téléphone (dates, graphiques, sélecteurs).
                 .environment(\.locale, Locale(identifier: "fr_FR"))
                 .environment(sync)
+                .environment(coach)
         }
         .modelContainer(container)
         .onChange(of: scenePhase) { _, phase in

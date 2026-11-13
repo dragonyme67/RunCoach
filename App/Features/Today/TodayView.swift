@@ -9,6 +9,7 @@ struct TodayView: View {
     @Query private var profiles: [AthleteProfile]
     @Query private var syncStates: [SyncState]
     @Environment(SyncEngine.self) private var sync
+    @Environment(CoachService.self) private var coach
     @State private var showSettings = false
     @State private var showGarminLogin = false
 
@@ -133,10 +134,21 @@ struct TodayView: View {
                 .font(.rcTitle)
                 .foregroundStyle(Color.rc.textPrimary)
             Text(workouts.isEmpty
-                 ? "Ton plan arrive avec le coach IA. En attendant, tes sorties Garmin s'affichent ici."
+                 ? "Le coach prépare ta semaine à partir de lundi, dans les limites de progression calculées pour toi."
                  : "Le repos fait partie de l'entraînement : c'est là que tu progresses.")
                 .font(.subheadline)
                 .foregroundStyle(Color.rc.textSecondary)
+            if workouts.isEmpty {
+                PrimaryButton(title: coach.isGenerating ? "Le coach prépare ta semaine…" : "Générer mon plan", icon: "sparkles") {
+                    Task { await coach.generateNextWeek() }
+                }
+                .disabled(coach.isGenerating)
+            }
+            if let notice = coach.notice {
+                Text(notice)
+                    .font(.subheadline)
+                    .foregroundStyle(Color.rc.textSecondary)
+            }
             if let next = nextWorkout {
                 Text("Prochaine séance : \(next.title)")
                     .font(.subheadline.weight(.semibold))

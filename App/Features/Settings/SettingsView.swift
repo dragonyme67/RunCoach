@@ -9,6 +9,7 @@ struct SettingsView: View {
     @Query private var goals: [Goal]
     @Query private var syncStates: [SyncState]
     @Environment(SyncEngine.self) private var sync
+    @Environment(CoachService.self) private var coach
     @State private var showOnboarding = false
     @State private var showGarminLogin = false
 
@@ -83,16 +84,36 @@ struct SettingsView: View {
             }
 
             Section {
-                HStack {
-                    Label("Fournisseur", systemImage: "sparkles")
-                    Spacer()
-                    Text("Aucun")
+                NavigationLink {
+                    AISettingsView()
+                } label: {
+                    HStack {
+                        Label("Mistral", systemImage: "sparkles")
+                        Spacer()
+                        Text(coach.hasKey ? "Clé enregistrée" : "Aucune clé")
+                            .foregroundStyle(Color.rc.textSecondary)
+                    }
+                }
+                Button {
+                    Task { await coach.generateNextWeek() }
+                } label: {
+                    HStack {
+                        Text("Générer la semaine prochaine")
+                        if coach.isGenerating {
+                            Spacer()
+                            ProgressView()
+                        }
+                    }
+                }
+                .disabled(coach.isGenerating)
+                if let notice = coach.notice {
+                    Text(notice)
                         .foregroundStyle(Color.rc.textSecondary)
                 }
             } header: {
                 Text("Coach IA")
             } footer: {
-                Text("Le coach IA arrive à l'étape 4, avec ta propre clé gratuite. Seuls des résumés chiffrés lui sont envoyés, jamais ta position.")
+                Text("Sans clé, un plan de secours calculé sans IA est proposé. Seuls des résumés chiffrés sont envoyés au coach, jamais ta position.")
             }
 
             Section {
