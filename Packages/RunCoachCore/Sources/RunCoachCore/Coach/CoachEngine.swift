@@ -35,10 +35,12 @@ public enum CoachEngine {
         }
 
         guard let llm else { return fallback(LLMError.missingKey.userMessage) }
+        // Au-delà, plan de secours : un modèle saturé peut faire attendre plusieurs minutes sans rien produire.
+        let deadline = Date().addingTimeInterval(150)
         var messages = [LLMMessage(role: "user", content: Prompts.weekPlan(snapshot: snapshot, brief: brief, recentPlan: recentPlan))]
         do {
             let first = try await llm.complete(system: Prompts.systemBase, messages: messages,
-                                               schemaName: "week_plan", schema: CoachSchemas.weekPlan)
+                                               schemaName: "week_plan", schema: CoachSchemas.weekPlan, deadline: deadline)
             switch check(first) {
             case .success(let plan):
                 return WeekResult(workouts: plan.workouts, summary: plan.summary, source: "ai", notice: nil)
@@ -46,7 +48,7 @@ public enum CoachEngine {
                 messages += [LLMMessage(role: "assistant", content: first), LLMMessage(role: "user", content: Prompts.repair(problems.lines))]
             }
             let second = try await llm.complete(system: Prompts.systemBase, messages: messages,
-                                                schemaName: "week_plan", schema: CoachSchemas.weekPlan)
+                                                schemaName: "week_plan", schema: CoachSchemas.weekPlan, deadline: deadline)
             if case .success(let plan) = check(second) {
                 return WeekResult(workouts: plan.workouts, summary: plan.summary, source: "ai", notice: nil)
             }
@@ -73,6 +75,7 @@ public enum CoachEngine {
                             planned: [WorkoutSpec], briefs: [WeekBrief], history: [LLMMessage], message: String) async throws -> ChatOutcome {
         let tier = Prompts.chatTier(message)
         let easy = Guardrails.easyPaceSPerKm(snapshot)
+        let briefs = briefs.map(chatBrief)
         var messages = [LLMMessage(role: "user", content: Prompts.chatMessage(
             todayLabel: todayLabel, snapshot: snapshot, upcoming: upcoming, briefs: tier == .hard ? briefs : [],
             history: Array(history.suffix(12)), message: message))]
@@ -118,12 +121,21 @@ public enum CoachEngine {
                 lines = ok
             case .failure(let problems):
                 messages += [LLMMessage(role: "assistant", content: text), LLMMessage(role: "user", content: Prompts.repair(problems.lines))]
-                if let second = try? await ask(), case .success(let ok) = check(second.response.actions) {
-                    response = second.response
-                    lines = ok
-                } else {
+                var reasons = problems.lines
+                if let second = try? await ask() {
+                    switch check(second.response.actions) {
+                    case .success(let ok):
+                        response = second.response
+                        lines = ok
+                        reasons = []
+                    case .failure(let again):
+                        reasons = again.lines
+                    }
+                }
+                if !reasons.isEmpty {
                     response.actions = []
-                    response.reply += "\n\nJe ne peux pas faire ce changement sans dépasser tes limites de progression."
+                    response.reply += "\n\nJe ne peux pas faire ce changement, il casserait une règle de sécurité : "
+                        + reasons.prefix(2).map(readable).joined(separator: " ; ") + "."
                 }
             }
         }
@@ -143,6 +155,28 @@ public enum CoachEngine {
 
     struct Problems: Error {
         let lines: [String]
+    }
+
+    /// Dans le chat, une demande explicite de l'athlète peut sortir de ses préférences (jours disponibles, jour de la
+    /// sortie longue, nombre de séances de renfo), jamais des règles de sécurité : volume, progression, jours durs,
+    /// repos, allures, douleur (demande de l'utilisateur, 2026-11-13 : « pouvoir adapter mes séances »).
+    static func chatBrief(_ brief: WeekBrief) -> WeekBrief {
+        var b = brief
+        if let start = DayKey.date(b.weekStart) {
+            b.availableDays = (0..<7).map { DayKey.key(DayKey.addDays($0, to: start)) }
+        }
+        b.longRunDay = nil
+        b.strengthSessions = max(b.strengthSessions, 3)
+        b.strengthDays = b.availableDays
+        for kind in [WorkoutKind.easy, .recovery, .strength] where !b.allowedKinds.contains(kind) {
+            b.allowedKinds.append(kind)
+        }
+        return b
+    }
+
+    /// « G7, séance du 2026-11-16 : … » devient « séance du 2026-11-16 : … » pour l'athlète.
+    static func readable(_ line: String) -> String {
+        line.replacingOccurrences(of: #"^G\d+,? ?:? ?"#, with: "", options: .regularExpression)
     }
 
     /// Km et durée recalculés par le code (jamais ceux de l'IA), textes coupés aux longueurs du schéma.

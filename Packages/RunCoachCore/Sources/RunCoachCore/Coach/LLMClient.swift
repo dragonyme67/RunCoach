@@ -87,8 +87,9 @@ public actor LLMClient {
     /// Contenu de `choices[0].message.content`. `schema` est le texte JSON du schéma (`CoachSchemas`).
     /// Quota atteint (429), modèle introuvable (404), panne (5xx), pas de réponse ou réponse vide : modèle suivant.
     /// Clé refusée ou autre erreur de requête : arrêt, aucun autre modèle n'y changerait rien.
+    /// `deadline` : passé cette heure, plus aucun modèle n'est essayé (un modèle saturé peut répondre en plus d'une minute).
     public func complete(system: String, messages: [LLMMessage], schemaName: String, schema: String,
-                         tier: LLMTier = .hard, models: [String]? = nil) async throws -> String {
+                         tier: LLMTier = .hard, models: [String]? = nil, deadline: Date? = nil) async throws -> String {
         let candidates = models ?? provider.models(for: tier)
         let now = Date()
         let available = candidates.filter { (unavailableUntil[$0] ?? .distantPast) <= now }
@@ -96,6 +97,8 @@ public actor LLMClient {
         var sawRateLimit = false
         // Tous mis de côté : on réessaie quand même, la limite a pu se réinitialiser.
         for model in available.isEmpty ? candidates : available {
+            if let deadline, Date() > deadline { break }
+            log?("→ \(model)")
             do {
                 return try await attempt(model: model, system: system, messages: messages, schemaName: schemaName, schema: schema)
             } catch let error as LLMError {

@@ -83,8 +83,18 @@ final class PlanFlowTests: XCTestCase {
         XCTAssertNotNil((schema["properties"] as! [String: Any])["actions"], "question d'entraînement : schéma avec actions")
     }
 
+    func testExplicitRequestsMayLeaveUsualDaysAndAddStrength() async throws {
+        let monday = PlanAction(op: .move, date: "2026-11-17", newDate: "2026-11-16")   // lundi : hors des jours habituels
+        let strength = PlanAction(op: .add, date: "2026-11-20", workout: GuardrailsTests.week()[1])
+        let (outcome, http) = try await chat([reply([monday, strength])])
+        XCTAssertEqual(outcome.response.actions.count, 2, "demande explicite : les préférences ne bloquent pas")
+        XCTAssertEqual(outcome.actionLines.count, 2)
+        XCTAssertEqual(http.requests.count, 1)
+    }
+
     func testInvalidActionsAreRepairedOnceThenDropped() async throws {
-        let monday = PlanAction(op: .move, date: "2026-11-17", newDate: "2026-11-16")   // G7 : lundi non disponible
+        // G4 : aucune séance de qualité autorisée cette semaine (débutant en fondation).
+        let monday = PlanAction(op: .replace, date: "2026-11-17", workout: GuardrailsTests.tempo("2026-11-17", repMin: 5))
         let (repaired, http) = try await chat([reply([monday]), reply([recoveryThursday])])
         XCTAssertEqual(repaired.response.actions, [recoveryThursday].map { action in
             var a = action
@@ -96,7 +106,8 @@ final class PlanFlowTests: XCTestCase {
         let (dropped, _) = try await chat([reply([monday])])
         XCTAssertEqual(dropped.response.actions, [])
         XCTAssertEqual(dropped.actionLines, [])
-        XCTAssertTrue(dropped.response.reply.contains("limites de progression"))
+        XCTAssertTrue(dropped.response.reply.contains("règle de sécurité"))
+        XCTAssertFalse(dropped.response.reply.contains("G4"), "raison lisible, sans identifiant de règle")
     }
 
     // MARK: Semaine de course, recalcul

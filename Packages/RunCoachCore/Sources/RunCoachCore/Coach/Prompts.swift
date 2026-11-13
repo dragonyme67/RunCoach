@@ -115,6 +115,8 @@ public enum Prompts {
       moins égale à la moitié de l'effort, retour au calme ; strength : 4 à 6 exercices du catalogue, 20 à 35 min.
       Durées en secondes, distances en mètres, allures en secondes par km. title : 40 caractères au plus,
       rationale : 240 au plus.
+    - Une demande explicite (une séance tel jour, du renfo en plus, un déplacement) se fait même hors de ses jours
+      habituels : seules les règles de sécurité comptent (volume, jours durs, repos, allures, douleur).
     - Douleur : remplace les séances dures à venir par du repos (remove) ou de la récupération courte.
     - N'annonce jamais qu'un changement est fait : il ne le sera qu'après sa confirmation (« je te propose… »).
 

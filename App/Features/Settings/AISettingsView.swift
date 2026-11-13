@@ -77,7 +77,7 @@ struct AISettingsView: View {
                         .font(.footnote)
                         .foregroundStyle(Color.rc.textSecondary)
                 }
-                NavigationLink("Diagnostic") { AIDiagnosticView() }
+                NavigationLink("Diagnostic", value: AppRoute.aiDiagnostic)
             } header: {
                 Text("Modèles")
             } footer: {

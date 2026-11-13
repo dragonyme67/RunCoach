@@ -66,16 +66,24 @@ final class CoachService {
         guard let key = keyStore.read(keyName), !key.isEmpty else { return nil }
         if let cached = clients[providerId], cached.key == key { return cached.client }
         let name = provider.name
-        let client = LLMClient(http: URLSessionHTTPClient(timeoutS: 60), provider: provider, apiKey: key) { line in
+        // 45 s par essai : avec la limite globale de la génération, un modèle saturé ne bloque pas tout.
+        let client = LLMClient(http: URLSessionHTTPClient(timeoutS: 45), provider: provider, apiKey: key) { line in
             let stamp = Date().formatted(date: .omitted, time: .standard)
-            Task { @MainActor in self.addDiagnostic("\(stamp) · \(name) · \(line)") }
+            Task { @MainActor in self.addDiagnostic(line, stamp: stamp, provider: name) }
         }
         clients[providerId] = (key, client)
         return client
     }
 
-    private func addDiagnostic(_ line: String) {
-        diagnostics.append(line)
+    /// Pendant une génération : le modèle en cours d'essai, pour que l'attente ne paraisse pas vide.
+    private(set) var generationStatus: String?
+
+    private func addDiagnostic(_ line: String, stamp: String, provider: String) {
+        if line.hasPrefix("→ ") {
+            if isGenerating { generationStatus = "Essai avec " + line.dropFirst(2) + "…" }
+            return
+        }
+        diagnostics.append("\(stamp) · \(provider) · \(line)")
         if diagnostics.count > 100 { diagnostics.removeFirst(diagnostics.count - 100) }
     }
 
@@ -114,7 +122,10 @@ final class CoachService {
     func generateNextWeek() async {
         guard !isGenerating else { return }
         isGenerating = true
-        defer { isGenerating = false }
+        defer {
+            isGenerating = false
+            generationStatus = nil
+        }
         let context = container.mainContext
         guard let profile = (try? context.fetch(FetchDescriptor<AthleteProfile>()))?.first else {
             notice = "Termine d'abord la configuration."

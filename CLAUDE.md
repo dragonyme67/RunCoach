@@ -6,6 +6,7 @@ Si un fait d'`ARCHITECTURE.md` s'avère faux, corrige-le là-bas dans le même c
 
 ## Contraintes non négociables
 - **Pas de Mac.** Tu ne peux rien compiler ici. La compilation se fait sur GitHub Actions ; lis les résultats avec `gh`.
+- **Dépôt public depuis le 2026-11-13** (quota macOS gratuit épuisé en privé ; audit de tout l'historique fait, accord de l'utilisateur) : rien de personnel ni de secret ne doit y entrer, jamais.
 - **Pas de backend, pas de dépendance tierce, tout gratuit.**
 - **Garmin : API non officielle, appelée depuis l'iPhone.** Respecte à la lettre les règles anti-blocage (§5.1.6) : jamais de boucle de connexion, requêtes séquentielles, backoff sur 427/429/403. Aucun test automatique ne touche les serveurs de Garmin.
 - **Le code calcule, l'IA rédige.** Tout ce que l'IA produit passe par `Guardrails` avant d'être enregistré.

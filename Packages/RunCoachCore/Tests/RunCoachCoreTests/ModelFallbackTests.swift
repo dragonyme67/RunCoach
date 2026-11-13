@@ -22,8 +22,8 @@ final class ModelFallbackTests: XCTestCase {
         _ = try await client.complete(system: "", messages: [], schemaName: "x", schema: "{}", tier: .hard)
         XCTAssertEqual(http.requests.map(model), ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.6-flash"],
                        "le modèle épuisé n'est plus essayé")
-        XCTAssertTrue(lines.all.first?.contains("HTTP 429") ?? false)
-        XCTAssertTrue(lines.all.first?.contains("Quota exceeded for requests per day") ?? false, "message de Google dans le diagnostic")
+        XCTAssertTrue(lines.all.contains { $0.contains("HTTP 429") })
+        XCTAssertTrue(lines.all.contains { $0.contains("Quota exceeded for requests per day") }, "message de Google dans le diagnostic")
     }
 
     func testLightRequestsStartWithTheLightestModel() async throws {

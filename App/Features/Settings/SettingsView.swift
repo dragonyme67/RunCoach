@@ -2,9 +2,9 @@ import SwiftUI
 import SwiftData
 import RunCoachCore
 
-/// Réglages (ouverts en feuille depuis l'avatar de l'écran Aujourd'hui).
+/// Réglages, ouverts dans la pile de l'écran Aujourd'hui (bouton retour et glissement natifs).
+/// Tout ce qui façonne le plan est modifiable ici : objectif, disponibilités, profil, santé (demande de l'utilisateur, 2026-11-13).
 struct SettingsView: View {
-    @Environment(\.dismiss) private var dismiss
     @Query private var profiles: [AthleteProfile]
     @Query private var goals: [Goal]
     @Query private var syncStates: [SyncState]
@@ -15,28 +15,57 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("Profil") {
-                if let profile = profiles.first {
-                    NavigationLink {
-                        ProfileEditView(profile: profile)
-                    } label: {
-                        Label(profile.firstName.isEmpty ? "Mon profil" : profile.firstName, systemImage: "person.fill")
-                    }
+            Section {
+                NavigationLink(value: AppRoute.goal) {
+                    row("Objectif", icon: "flag.checkered", value: goalSummary)
                 }
-                if let goal = goals.first(where: { $0.isActive }) {
+                NavigationLink(value: AppRoute.training) {
+                    row("Entraînement", icon: "calendar", value: trainingSummary)
+                }
+                NavigationLink(value: AppRoute.profile) {
+                    row("Toi", icon: "person.fill", value: profiles.first.map { $0.firstName.isEmpty ? "" : $0.firstName } ?? "")
+                }
+                NavigationLink(value: AppRoute.health) {
+                    row("Santé", icon: "cross.case.fill", value: profiles.first?.currentPain == true ? "Douleur déclarée" : "")
+                }
+            } header: {
+                Text("Ton plan")
+            }
+
+            Section {
+                Button {
+                    Task { await coach.generateNextWeek() }
+                } label: {
                     HStack {
-                        Label(goal.name, systemImage: "flag.checkered")
-                        Spacer()
-                        if let target = goal.targetTimeS {
-                            Text(Fmt.duration(target))
-                                .monospacedDigit()
-                                .foregroundStyle(Color.rc.textSecondary)
+                        Text("Mettre à jour la semaine prochaine")
+                        if coach.isGenerating {
+                            Spacer()
+                            ProgressView()
                         }
                     }
                 }
-                Button("Refaire la configuration") {
-                    showOnboarding = true
+                .disabled(coach.isGenerating)
+                if coach.isGenerating, let status = coach.generationStatus {
+                    Text(status)
+                        .font(.footnote)
+                        .foregroundStyle(Color.rc.textSecondary)
                 }
+                if let notice = coach.notice {
+                    Text(notice)
+                        .foregroundStyle(Color.rc.textSecondary)
+                }
+            } footer: {
+                Text("Après un changement d'objectif, de jours ou de santé : le plan jusqu'à la course est recalculé et la semaine prochaine régénérée. Les séances déjà faites ne bougent pas.")
+            }
+
+            Section {
+                NavigationLink(value: AppRoute.ai) {
+                    row(coach.provider.name, icon: "sparkles", value: coach.hasKey ? "Clé enregistrée" : "Aucune clé")
+                }
+            } header: {
+                Text("Coach IA")
+            } footer: {
+                Text("Sans clé, un plan de secours calculé sans IA est proposé. Seuls des résumés chiffrés sont envoyés au coach, jamais ta position.")
             }
 
             Section {
@@ -76,7 +105,7 @@ struct SettingsView: View {
                 } else {
                     Button("Se connecter à Garmin") { showGarminLogin = true }
                 }
-                NavigationLink("Diagnostic") { GarminDiagnosticView() }
+                NavigationLink("Diagnostic", value: AppRoute.garminDiagnostic)
             } header: {
                 Text("Garmin")
             } footer: {
@@ -84,39 +113,9 @@ struct SettingsView: View {
             }
 
             Section {
-                NavigationLink {
-                    AISettingsView()
-                } label: {
-                    HStack {
-                        Label(coach.provider.name, systemImage: "sparkles")
-                        Spacer()
-                        Text(coach.hasKey ? "Clé enregistrée" : "Aucune clé")
-                            .foregroundStyle(Color.rc.textSecondary)
-                    }
+                Button("Refaire la configuration") {
+                    showOnboarding = true
                 }
-                Button {
-                    Task { await coach.generateNextWeek() }
-                } label: {
-                    HStack {
-                        Text("Générer la semaine prochaine")
-                        if coach.isGenerating {
-                            Spacer()
-                            ProgressView()
-                        }
-                    }
-                }
-                .disabled(coach.isGenerating)
-                if let notice = coach.notice {
-                    Text(notice)
-                        .foregroundStyle(Color.rc.textSecondary)
-                }
-            } header: {
-                Text("Coach IA")
-            } footer: {
-                Text("Sans clé, un plan de secours calculé sans IA est proposé. Seuls des résumés chiffrés sont envoyés au coach, jamais ta position.")
-            }
-
-            Section {
                 HStack {
                     Text("Version")
                     Spacer()
@@ -133,15 +132,31 @@ struct SettingsView: View {
         .rcScreenBackground()
         .navigationTitle("Réglages")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("OK") { dismiss() }
-            }
-        }
         .fullScreenCover(isPresented: $showOnboarding) {
             OnboardingFlow(onFinish: { showOnboarding = false })
         }
         .fullScreenCover(isPresented: $showGarminLogin) { GarminLoginView() }
+    }
+
+    private func row(_ title: String, icon: String, value: String) -> some View {
+        HStack {
+            Label(title, systemImage: icon)
+            Spacer()
+            Text(value)
+                .lineLimit(1)
+                .foregroundStyle(Color.rc.textSecondary)
+        }
+    }
+
+    private var goalSummary: String {
+        guard let goal = goals.first(where: { $0.isActive }) else { return "Aucun" }
+        return goal.name + (goal.targetTimeS.map { " · " + Fmt.duration($0) } ?? "")
+    }
+
+    private var trainingSummary: String {
+        guard let profile = profiles.first else { return "" }
+        let count = profile.availableWeekdays.count
+        return "\(count) jour\(count > 1 ? "s" : "") par semaine"
     }
 }
 
@@ -169,52 +184,74 @@ struct GarminDiagnosticView: View {
     }
 }
 
-/// Édition du profil : les mêmes champs que l'onboarding.
+/// Réglages → Toi : ce qui sert au calcul des allures et des zones (sortie de référence, FC) et le profil.
 struct ProfileEditView: View {
-    @Bindable var profile: AthleteProfile
+    @Query private var profiles: [AthleteProfile]
 
     var body: some View {
         Form {
-            Section("Toi") {
-                TextField("Prénom", text: $profile.firstName)
-                DatePicker("Date de naissance", selection: $profile.birthDate, displayedComponents: .date)
-            }
-            Section("Disponibilités") {
-                WeekdayPicker(selection: $profile.availableWeekdays)
-                Picker("Sortie longue", selection: $profile.longRunWeekday) {
-                    ForEach(1...7, id: \.self) { day in
-                        Text(WeekdayPicker.names[day - 1]).tag(day)
-                    }
-                }
-                Stepper("Durée max : \(profile.maxSessionMinutes) min", value: $profile.maxSessionMinutes, in: 20...180, step: 5)
-            }
-            Section {
-                Toggle("Douleur en ce moment", isOn: $profile.currentPain)
-                Picker("Fatigue", selection: $profile.fatigueLevel) {
-                    Text("Faible").tag("low")
-                    Text("Normale").tag("normal")
-                    Text("Élevée").tag("high")
-                }
-                TextField("Blessures ou antécédents", text: $profile.injuryNote, axis: .vertical)
-                    .lineLimit(2...5)
-            } header: {
-                Text("Santé")
-            } footer: {
-                Text("Une douleur déclarée allège immédiatement ton plan.")
-            }
-            Section("Renforcement") {
-                Toggle("Inclure du renfo", isOn: $profile.wantsStrength)
-                Picker("Matériel", selection: $profile.strengthEquipment) {
-                    Text("Aucun").tag("none")
-                    Text("Haltères").tag("dumbbells")
-                    Text("Salle").tag("gym")
-                }
+            if let profile = profiles.first {
+                ProfileFields(profile: profile)
             }
         }
         .scrollContentBackground(.hidden)
         .rcScreenBackground()
-        .navigationTitle("Profil")
+        .navigationTitle("Toi")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct ProfileFields: View {
+    @Bindable var profile: AthleteProfile
+
+    var body: some View {
+        Section("Toi") {
+            TextField("Prénom", text: $profile.firstName)
+            DatePicker("Date de naissance", selection: $profile.birthDate, in: ...Date(), displayedComponents: .date)
+            Picker("Sexe", selection: Binding(get: { profile.sex ?? "" }, set: { profile.sex = $0.isEmpty ? nil : $0 })) {
+                Text("Non précisé").tag("")
+                Text("Homme").tag("male")
+                Text("Femme").tag("female")
+            }
+            DatePicker("Je cours depuis", selection: $profile.runningSince, in: ...Date(), displayedComponents: .date)
+        }
+        Section {
+            Stepper(Fmt.decimal(profile.recentRunDistanceM / 1000, decimals: 1) + " km",
+                    value: Binding(get: { profile.recentRunDistanceM / 1000 }, set: { profile.recentRunDistanceM = $0 * 1000 }),
+                    in: 1...42.2, step: 0.5)
+            Stepper("En " + Fmt.duration(profile.recentRunDurationS),
+                    value: Binding(get: { profile.recentRunDurationS / 60 }, set: { profile.recentRunDurationS = $0 * 60 }),
+                    in: 5...360, step: 1)
+            Picker("Ressenti", selection: $profile.recentRunEffort) {
+                Text("Facile").tag("easy")
+                Text("Modéré").tag("moderate")
+                Text("Dur").tag("hard")
+            }
+        } header: {
+            Text("Sortie de référence")
+        } footer: {
+            Text("Utilisée tant que tes sorties Garmin des 6 dernières semaines ne suffisent pas pour estimer tes allures.")
+        }
+        Section {
+            Toggle("Je connais ma FC max", isOn: Binding(get: { profile.hrMax != nil }, set: { profile.hrMax = $0 ? (profile.hrMax ?? 190) : nil }))
+            if let hrMax = profile.hrMax {
+                Stepper("FC max : \(hrMax) bpm", value: Binding(get: { hrMax }, set: { profile.hrMax = $0 }), in: 140...225)
+            }
+            Toggle("Je connais ma FC au repos", isOn: Binding(get: { profile.hrRest != nil }, set: { profile.hrRest = $0 ? (profile.hrRest ?? 60) : nil }))
+            if let hrRest = profile.hrRest {
+                Stepper("FC au repos : \(hrRest) bpm", value: Binding(get: { hrRest }, set: { profile.hrRest = $0 }), in: 35...100)
+            }
+            Toggle("Fixer mon allure seuil", isOn: Binding(get: { profile.thresholdPaceOverrideSPerKm != nil },
+                                                        set: { profile.thresholdPaceOverrideSPerKm = $0 ? (profile.thresholdPaceOverrideSPerKm ?? 360) : nil }))
+            if let threshold = profile.thresholdPaceOverrideSPerKm {
+                Stepper("Allure seuil : " + Fmt.pace(sPerKm: threshold) + " /km",
+                        value: Binding(get: { threshold }, set: { profile.thresholdPaceOverrideSPerKm = $0 }), in: 180...600, step: 5)
+            }
+        } header: {
+            Text("Cœur et allures")
+        } footer: {
+            Text("Sans valeur saisie, la FC max est estimée par l'âge et l'allure seuil par tes sorties. Ne fixe l'allure seuil que si tu la connais par un test.")
+        }
     }
 }
 

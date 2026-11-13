@@ -10,7 +10,6 @@ struct TodayView: View {
     @Query private var syncStates: [SyncState]
     @Environment(SyncEngine.self) private var sync
     @Environment(CoachService.self) private var coach
-    @State private var showSettings = false
     @State private var showGarminLogin = false
 
     private var todayKey: String { DayKey.key(Date()) }
@@ -64,9 +63,6 @@ struct TodayView: View {
         .refreshable { await sync.sync(background: false) }
         .rcScreenBackground()
         .toolbar(.hidden, for: .navigationBar)
-        .sheet(isPresented: $showSettings) {
-            NavigationStack { SettingsView() }
-        }
         .fullScreenCover(isPresented: $showGarminLogin) { GarminLoginView() }
         .sensoryFeedback(.warning, trigger: sync.message) { _, new in new != nil }
     }
@@ -108,9 +104,8 @@ struct TodayView: View {
             if let pillState {
                 SyncPill(state: pillState)
             }
-            Button {
-                showSettings = true
-            } label: {
+            // Réglages ouverts dans la pile : bouton retour et glissement natifs d'iOS.
+            NavigationLink(value: AppRoute.settings) {
                 Image(systemName: "person.crop.circle.fill")
                     .font(.title)
                     .foregroundStyle(Color.rc.textSecondary)
@@ -143,6 +138,11 @@ struct TodayView: View {
                     Task { await coach.generateNextWeek() }
                 }
                 .disabled(coach.isGenerating)
+                if coach.isGenerating {
+                    Text(coach.generationStatus ?? "Jusqu'à 2 à 3 minutes si le service d'IA est saturé ; sinon, plan de secours.")
+                        .font(.footnote)
+                        .foregroundStyle(Color.rc.textSecondary)
+                }
             }
             if let notice = coach.notice {
                 Text(notice)

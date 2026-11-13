@@ -8,7 +8,6 @@ struct CoachChatView: View {
     @Query(sort: \ChatMessage.createdAt) private var messages: [ChatMessage]
     @Environment(CoachService.self) private var coach
     @State private var draft = ""
-    @State private var showSettings = false
     @FocusState private var isTyping: Bool
 
     private let suggestions = [
@@ -23,10 +22,19 @@ struct CoachChatView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 if !coach.hasKey {
-                    EmptyState(icon: "key.fill", title: "Ajoute une clé IA gratuite",
-                               message: "Le coach répond avec ta propre clé Groq ou Gemini, à saisir dans Réglages.",
-                               actionTitle: "Ouvrir les réglages") { showSettings = true }
-                        .rcCard()
+                    VStack(spacing: Spacing.m) {
+                        EmptyState(icon: "key.fill", title: "Ajoute une clé IA gratuite",
+                                   message: "Le coach répond avec ta propre clé Groq ou Gemini.")
+                        NavigationLink(value: AppRoute.ai) {
+                            Text("Ajouter ma clé")
+                                .font(.headline)
+                                .foregroundStyle(Color.rc.onAccent)
+                                .frame(maxWidth: .infinity, minHeight: 50)
+                                .background(Color.rc.accent, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .rcCard()
                 }
                 ForEach(messages) { message in
                     ChatBubble(text: message.text, isUser: message.role == "user")
@@ -59,19 +67,10 @@ struct CoachChatView: View {
         // Le clavier cachait la barre d'onglets sans pouvoir être fermé (constat sur l'iPhone).
         .scrollDismissesKeyboard(.interactively)
         .onTapGesture { isTyping = false }
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("OK") { isTyping = false }
-            }
-        }
         .rcScreenBackground()
         .navigationTitle("Coach")
         .safeAreaInset(edge: .bottom) {
             composer
-        }
-        .sheet(isPresented: $showSettings) {
-            NavigationStack { AISettingsView() }
         }
     }
 

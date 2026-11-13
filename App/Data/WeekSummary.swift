@@ -22,7 +22,8 @@ struct WeekSummary {
 
     init(date: Date, workouts: [PlannedWorkout], runs: [Run]) {
         let start = DayKey.weekStart(date)
-        let todayKey = DayKey.key(date)
+        // Le jour en surbrillance reste aujourd'hui, même en affichant une autre semaine.
+        let todayKey = DayKey.key(Date())
         let letters = ["L", "M", "M", "J", "V", "S", "D"]
         var days: [Day] = []
         var keys = Set<String>()

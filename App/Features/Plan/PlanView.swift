@@ -8,6 +8,8 @@ struct PlanView: View {
     @Query(sort: \Run.startDate, order: .reverse) private var runs: [Run]
     @Query private var plans: [TrainingPlan]
     @State private var mode = 0
+    /// Semaine affichée : 0 = la semaine en cours, -1 la précédente, +1 la suivante…
+    @State private var weekOffset = 0
 
     private static let weekdayLetters = ["L", "M", "M", "J", "V", "S", "D"]
 
@@ -36,9 +38,12 @@ struct PlanView: View {
     // MARK: - Semaine
 
     private var weekView: some View {
-        let week = WeekSummary(date: Date(), workouts: workouts, runs: runs)
-        let phase = plans.first?.macroWeeks.first?.phase
+        let date = DayKey.addDays(7 * weekOffset, to: Date())
+        let week = WeekSummary(date: date, workouts: workouts, runs: runs)
+        let weekKey = DayKey.key(DayKey.weekStart(date))
+        let phase = plans.first { $0.isActive }?.macroWeeks.first { $0.weekStart == weekKey }?.phase
         return VStack(alignment: .leading, spacing: Spacing.m) {
+            weekSwitcher(start: DayKey.weekStart(date))
             HStack(alignment: .firstTextBaseline) {
                 HeroNumber(value: Fmt.decimal(week.plannedKm, decimals: 1), unit: "km prévus")
                 Spacer()
@@ -55,6 +60,42 @@ struct PlanView: View {
                 dayRow(day)
             }
         }
+    }
+
+    /// « ‹ Semaine du 16 novembre › » ; toucher le titre ramène à la semaine en cours.
+    private func weekSwitcher(start: Date) -> some View {
+        HStack {
+            Button {
+                withAnimation(.rcStandard) { weekOffset -= 1 }
+            } label: {
+                Image(systemName: "chevron.left").frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Semaine précédente")
+            Spacer()
+            Button {
+                withAnimation(.rcStandard) { weekOffset = 0 }
+            } label: {
+                VStack(spacing: 2) {
+                    Text(weekOffset == 0 ? "Cette semaine" : weekOffset == 1 ? "Semaine prochaine" : weekOffset == -1 ? "Semaine dernière" : "Semaine")
+                        .font(.headline)
+                        .foregroundStyle(Color.rc.textPrimary)
+                    Text("du " + start.formatted(.dateTime.day().month(.wide).locale(Locale(identifier: "fr_FR"))))
+                        .font(.caption)
+                        .foregroundStyle(Color.rc.textSecondary)
+                }
+            }
+            .buttonStyle(.plain)
+            Spacer()
+            Button {
+                withAnimation(.rcStandard) { weekOffset += 1 }
+            } label: {
+                Image(systemName: "chevron.right").frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Semaine suivante")
+        }
+        .font(.headline)
+        .foregroundStyle(Color.rc.accentText)
+        .sensoryFeedback(.selection, trigger: weekOffset)
     }
 
     @ViewBuilder
