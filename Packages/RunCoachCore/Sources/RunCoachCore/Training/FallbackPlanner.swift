@@ -6,9 +6,9 @@ public enum FallbackPlanner {
     public static func week(brief: WeekBrief, snapshot: AthleteSnapshot, raceDay: String? = nil,
                             raceDistanceKm: Double? = nil) -> [WorkoutSpec] {
         // Douleur : repos complet (G11 n'autorise que de la récupération courte, le repos est plus sûr).
-        guard !snapshot.athlete.currentPain else { return [] }
+        guard snapshot.athlete.pain != "severe" else { return [] }
         let easy = Guardrails.easyPaceSPerKm(snapshot)
-        let tired = snapshot.athlete.fatigueLevel == "high"
+        let tired = snapshot.athlete.needsReducedLoad
         let recent = snapshot.lastWeeks.suffix(3)
 
         var budget = min(brief.targetKm, brief.maxKm) * (tired ? 0.8 : 1)

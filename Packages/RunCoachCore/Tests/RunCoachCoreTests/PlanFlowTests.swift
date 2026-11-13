@@ -56,12 +56,12 @@ final class PlanFlowTests: XCTestCase {
         return HTTPResponse(status: 200, body: try! JSONSerialization.data(withJSONObject: ["choices": [["message": ["content": text]]]]))
     }
 
-    private func chat(_ responses: [HTTPResponse]) async throws -> (CoachEngine.ChatOutcome, FakeHTTP) {
+    private func chat(_ responses: [HTTPResponse], snapshot: AthleteSnapshot = GuardrailsTests.snapshot()) async throws -> (CoachEngine.ChatOutcome, FakeHTTP) {
         let queue = Queue(responses)
         let http = FakeHTTP { _ in queue.next() }
         let outcome = try await CoachEngine.chat(
             llm: LLMClient(http: http, provider: .groq, apiKey: "k"), todayLabel: "lundi 16 novembre 2026", todayKey: "2026-11-16",
-            snapshot: GuardrailsTests.snapshot(), upcoming: "[]", planned: GuardrailsTests.week(), briefs: [GuardrailsTests.brief()],
+            snapshot: snapshot, upcoming: "[]", planned: GuardrailsTests.week(), briefs: [GuardrailsTests.brief()],
             history: [], message: "Remplace ma séance de jeudi par quelque chose de plus léger")
         return (outcome, http)
     }
@@ -90,6 +90,45 @@ final class PlanFlowTests: XCTestCase {
         XCTAssertEqual(outcome.response.actions.count, 2, "demande explicite : les préférences ne bloquent pas")
         XCTAssertEqual(outcome.actionLines.count, 2)
         XCTAssertEqual(http.requests.count, 1)
+    }
+
+    // MARK: Douleur dosée
+
+    func testMildPainKeepsEasyRunsAndStrengthButNoIntensity() {
+        var mild = GuardrailsTests.snapshot()
+        mild.athlete.currentPain = true
+        mild.athlete.painLevel = "mild"
+        var brief = GuardrailsTests.brief()
+        brief.targetKm = 21   // la semaine de référence (16,7 km) tient dans les 80 %
+        XCTAssertEqual(Guardrails.validate(week: GuardrailsTests.week(), brief: brief, snapshot: mild), [],
+                       "gêne légère : footings, sortie longue et renfo restent permis")
+        brief.maxQualitySessions = 1
+        brief.allowedKinds += [.tempo]
+        var week = GuardrailsTests.week()
+        week[0] = GuardrailsTests.tempo("2026-11-17", repMin: 5)
+        let violations = Guardrails.validate(week: week, brief: brief, snapshot: mild)
+        XCTAssertEqual(violations.map(\.rule), ["G11"])
+        XCTAssertEqual(violations.first?.date, "2026-11-17")
+    }
+
+    func testPainDoesNotBlockUnrelatedChanges() async throws {
+        // Gêne déclarée après coup : la semaine dépasse déjà les 80 % (16,7 km > 13,2), sans que l'ajout y change rien.
+        var mild = GuardrailsTests.snapshot()
+        mild.athlete.currentPain = true
+        mild.athlete.painLevel = "mild"
+        let strength = PlanAction(op: .add, date: "2026-11-20", workout: GuardrailsTests.week()[1])
+        let (allowed, _) = try await chat([reply([strength])], snapshot: mild)
+        XCTAssertEqual(allowed.response.actions.count, 1, "ajouter un renfo n'aggrave rien")
+
+        let extraRun = PlanAction(op: .add, date: "2026-11-20", workout: GuardrailsTests.easy("2026-11-20", minutes: 30))
+        let (refused, _) = try await chat([reply([extraRun])], snapshot: mild)
+        XCTAssertEqual(refused.response.actions, [], "ajouter des km aggrave le dépassement")
+
+        var severe = GuardrailsTests.snapshot()
+        severe.athlete.currentPain = true
+        let (blocked, _) = try await chat([reply([strength])], snapshot: severe)
+        XCTAssertEqual(blocked.response.actions, [], "douleur nette : repos ou récupération seulement")
+        XCTAssertTrue(blocked.response.reply.contains("douleur nette"))
     }
 
     func testInvalidActionsAreRepairedOnceThenDropped() async throws {

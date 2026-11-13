@@ -67,8 +67,8 @@ extension CoachSchemas {
                                                 "date":{"type":"string"},"new_date":{"type":["string","null"]},
                                                 "workout":{"anyOf":[\#(workout),{"type":"null"}]}}}},
                        "profile_patch":{"type":"object","additionalProperties":false,
-                                        "required":["current_pain","fatigue_level","injury_note"],
-                                        "properties":{"current_pain":{"type":["boolean","null"]},
+                                        "required":["current_pain","pain_level","fatigue_level","injury_note"],
+                                        "properties":{"current_pain":{"type":["boolean","null"]},"pain_level":{"type":["string","null"]},
                                                       "fatigue_level":{"type":["string","null"]},
                                                       "injury_note":{"type":["string","null"]}}},
                        "safety":{"type":"string","enum":["none","pain","medical"]}}}
@@ -80,8 +80,8 @@ extension CoachSchemas {
     {"type":"object","additionalProperties":false,"required":["reply","profile_patch","safety"],
      "properties":{"reply":{"type":"string"},
                    "profile_patch":{"type":"object","additionalProperties":false,
-                                    "required":["current_pain","fatigue_level","injury_note"],
-                                    "properties":{"current_pain":{"type":["boolean","null"]},
+                                    "required":["current_pain","pain_level","fatigue_level","injury_note"],
+                                    "properties":{"current_pain":{"type":["boolean","null"]},"pain_level":{"type":["string","null"]},
                                                   "fatigue_level":{"type":["string","null"]},
                                                   "injury_note":{"type":["string","null"]}}},
                    "safety":{"type":"string","enum":["none","pain","medical"]}}}
@@ -92,12 +92,14 @@ extension CoachSchemas {
 public struct ChatResponse: Codable, Equatable, Sendable {
     public struct ProfilePatch: Codable, Equatable, Sendable {
         public var currentPain: Bool?
+        /// `mild` ou `severe`, toute autre valeur est ignorée.
+        public var painLevel: String?
         /// `low` / `normal` / `high`, toute autre valeur est ignorée.
         public var fatigueLevel: String?
         public var injuryNote: String?
 
         enum CodingKeys: String, CodingKey {
-            case currentPain = "current_pain", fatigueLevel = "fatigue_level", injuryNote = "injury_note"
+            case currentPain = "current_pain", painLevel = "pain_level", fatigueLevel = "fatigue_level", injuryNote = "injury_note"
         }
 
         public init(currentPain: Bool? = nil, fatigueLevel: String? = nil, injuryNote: String? = nil) {

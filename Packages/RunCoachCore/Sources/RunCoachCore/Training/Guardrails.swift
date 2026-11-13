@@ -123,17 +123,19 @@ public enum Guardrails {
         }
 
         // G11 : douleur ou grosse fatigue.
-        if snapshot.athlete.currentPain {
+        if snapshot.athlete.pain == "severe" {
             for w in week where w.kind != .recovery || durationMin(w, easyPaceSPerKm: easy) > 30.5 {
-                add("G11", w.date, "douleur déclarée : uniquement de la récupération de 30 min au plus, ou du repos")
+                add("G11", w.date, "douleur nette déclarée : uniquement de la récupération de 30 min au plus, ou du repos")
             }
         }
-        if snapshot.athlete.fatigueLevel == "high" {
-            if quality > 0 {
-                add("G11", nil, "fatigue élevée : aucune séance de tempo ou de fractionné")
+        // Gêne légère ou fatigue élevée : footings, sortie longue et renfo restent possibles, sans intensité.
+        if snapshot.athlete.needsReducedLoad {
+            let reason = snapshot.athlete.pain == "mild" ? "gêne déclarée" : "fatigue élevée"
+            for w in week where w.kind == .tempo || w.kind == .intervals {
+                add("G11", w.date, "\(reason) : pas de séance de tempo ni de fractionné")
             }
             if total > 0.8 * brief.targetKm + epsKm {
-                add("G11", nil, "fatigue élevée : \(km(0.8 * brief.targetKm)) km au plus cette semaine")
+                add("G11", nil, "\(reason) : \(km(0.8 * brief.targetKm)) km de course au plus cette semaine")
             }
         }
 

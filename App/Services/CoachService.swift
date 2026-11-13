@@ -17,6 +17,8 @@ final class CoachService {
     private(set) var isReplying = false
     /// Erreur du dernier message du chat (non enregistrée).
     private(set) var chatError: String?
+    /// Message préparé depuis un autre écran (« En parler au coach ») : l'onglet Coach s'ouvre et le reprend.
+    var pendingDraft: String?
 
     /// Fournisseur choisi dans Réglages (Groq par défaut). Pas secret : gardé dans les préférences.
     var providerId: String {
@@ -189,10 +191,12 @@ final class CoachService {
         guard let start = DayKey.date(week.weekStart) else { return nil }
         let weekKeys = (0..<7).map { DayKey.key(DayKey.addDays($0, to: start)) }
         let raceDay = goal?.raceDate.map(DayKey.key).flatMap { weekKeys.contains($0) ? $0 : nil }
-        return WeekBriefBuilder.brief(WeekBriefBuilder.Input(
+        var input = WeekBriefBuilder.Input(
             week: week, availableWeekdays: profile.availableWeekdays, longRunWeekday: profile.longRunWeekday,
             maxSessionMin: profile.maxSessionMinutes, wantsStrength: profile.wantsStrength, beginner: beginner,
-            loadRatio: snapshot.load.ratio, lastWeekKm: snapshot.lastWeeks.last?.km ?? 0, raceDay: raceDay))
+            loadRatio: snapshot.load.ratio, lastWeekKm: snapshot.lastWeeks.last?.km ?? 0, raceDay: raceDay)
+        input.reducedLoad = snapshot.athlete.needsReducedLoad
+        return WeekBriefBuilder.brief(input)
     }
 
     /// Une fois par jour à l'ouverture : le samedi, le dimanche ou le lundi, si la semaine à venir n'a pas encore
@@ -273,6 +277,7 @@ final class CoachService {
                 restingHr: metrics.last { $0.restingHR != nil }?.restingHR),
             missedLast14d: missed)
         input.detailedRuns = detailed
+        input.painLevel = profile.painLevel
         return input
     }
 
@@ -334,7 +339,10 @@ final class CoachService {
             }
             context.insert(reply)
             let patch = response.profilePatch
-            if let pain = patch.currentPain { profile.currentPain = pain }
+            // Niveau non précisé par l'IA : on garde celui déjà déclaré, sinon gêne légère (le coach demande de préciser).
+            if let pain = patch.currentPain {
+                profile.pain = pain ? (patch.painLevel ?? (profile.currentPain ? profile.pain : "mild")) : "none"
+            }
             if let fatigue = patch.fatigueLevel { profile.fatigueLevel = fatigue }
             if let note = patch.injuryNote, !note.isEmpty { profile.injuryNote = note }
             profile.updatedAt = Date()

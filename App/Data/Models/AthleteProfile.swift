@@ -23,6 +23,8 @@ final class AthleteProfile {
     var hrRest: Int?
     var injuryNote: String
     var currentPain: Bool
+    /// `mild` (gêne légère) ou `severe` (douleur nette) quand `currentPain` est vrai. Optionnel : ajouté après l'étape 2.
+    var painLevel: String?
     /// `low` / `normal` / `high`
     var fatigueLevel: String
     var wantsStrength: Bool
@@ -55,5 +57,15 @@ final class AthleteProfile {
         self.wantsStrength = true
         self.strengthEquipment = "none"
         self.updatedAt = Date()
+    }
+
+    /// `none`, `mild` ou `severe`. Une douleur enregistrée sans niveau (ancienne version) compte comme nette.
+    var pain: String {
+        get { currentPain ? (painLevel == "mild" ? "mild" : "severe") : "none" }
+        set {
+            currentPain = newValue != "none"
+            painLevel = newValue == "none" ? nil : newValue
+            updatedAt = Date()
+        }
     }
 }

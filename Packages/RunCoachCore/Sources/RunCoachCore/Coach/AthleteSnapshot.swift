@@ -10,6 +10,8 @@ public struct AthleteSnapshot: Codable, Equatable, Sendable {
         public var level: String
         public var injuryNote: String
         public var currentPain: Bool
+        /// `mild` (gêne légère) ou `severe` (douleur nette) quand `currentPain` est vrai ; absent = `severe` par prudence.
+        public var painLevel: String?
         /// `low` / `normal` / `high`
         public var fatigueLevel: String
         public var wantsStrength: Bool
@@ -17,7 +19,7 @@ public struct AthleteSnapshot: Codable, Equatable, Sendable {
 
         enum CodingKeys: String, CodingKey {
             case age, sex, runningSinceWeeks = "running_since_weeks", level, injuryNote = "injury_note"
-            case currentPain = "current_pain", fatigueLevel = "fatigue_level", wantsStrength = "wants_strength"
+            case currentPain = "current_pain", painLevel = "pain_level", fatigueLevel = "fatigue_level", wantsStrength = "wants_strength"
             case strengthEquipment = "strength_equipment"
         }
 
@@ -35,6 +37,11 @@ public struct AthleteSnapshot: Codable, Equatable, Sendable {
         }
 
         public var isBeginner: Bool { level == "beginner" }
+
+        /// `none`, `mild` ou `severe`.
+        public var pain: String { currentPain ? (painLevel == "mild" ? "mild" : "severe") : "none" }
+        /// Gêne légère ou fatigue élevée : pas de séance intense, volume réduit de 20 % (G11).
+        public var needsReducedLoad: Bool { pain == "mild" || fatigueLevel == "high" }
     }
 
     public struct Goal: Codable, Equatable, Sendable {

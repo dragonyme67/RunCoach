@@ -30,8 +30,8 @@ struct TodayView: View {
                 if let message = sync.message {
                     syncBanner(message)
                 }
-                if profiles.first?.currentPain == true {
-                    painBanner
+                if let profile = profiles.first, profile.currentPain {
+                    painBanner(profile)
                 }
                 if !sync.isConnected && runs.isEmpty && sync.phase != .needsLogin {
                     EmptyState(icon: "applewatch", title: "Connecte Garmin",
@@ -49,6 +49,15 @@ struct TodayView: View {
                     restCard
                 }
                 weekCard(week)
+                if profiles.first?.currentPain == false {
+                    NavigationLink(value: AppRoute.health) {
+                        Label("Une gêne, une douleur, de la fatigue ? Signale-le", systemImage: "cross.case")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(Color.rc.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, Spacing.s)
+                    }
+                }
                 if let run = runs.first {
                     SectionHeader(title: "Dernière activité")
                     NavigationLink(value: run) {
@@ -115,11 +124,33 @@ struct TodayView: View {
         }
     }
 
-    private var painBanner: some View {
-        Label("Douleur déclarée : plan allégé. Consulte si elle persiste.", systemImage: "cross.case.fill")
-            .font(.subheadline.weight(.medium))
-            .foregroundStyle(Color.rc.danger)
-            .rcCard()
+    /// Douleur déclarée : son niveau, ce que ça change, et de quoi la mettre à jour sans chercher dans les réglages.
+    private func painBanner(_ profile: AthleteProfile) -> some View {
+        let severe = profile.pain == "severe"
+        return VStack(alignment: .leading, spacing: Spacing.m) {
+            Label(severe ? "Douleur nette déclarée" : "Gêne légère déclarée", systemImage: "cross.case.fill")
+                .font(.headline)
+                .foregroundStyle(severe ? Color.rc.danger : Color.rc.warning)
+            Text(severe
+                 ? "Repos ou récupération courte seulement. Consulte un médecin ou un kiné avant de reprendre."
+                 : "Plus de séance intense et volume réduit ; footings et renfo restent possibles. Consulte si elle persiste.")
+                .font(.subheadline)
+                .foregroundStyle(Color.rc.textSecondary)
+            HStack(spacing: Spacing.s) {
+                Button("Ça va mieux") {
+                    withAnimation(.rcStandard) { profile.pain = "none" }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.rc.accent)
+                .foregroundStyle(Color.rc.onAccent)
+                Button(severe ? "C'est plus léger" : "Ça s'aggrave") {
+                    withAnimation(.rcStandard) { profile.pain = severe ? "mild" : "severe" }
+                }
+                .buttonStyle(.bordered)
+            }
+            .font(.subheadline.weight(.semibold))
+        }
+        .rcCard()
     }
 
     private var restCard: some View {

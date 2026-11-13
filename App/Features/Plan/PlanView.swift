@@ -7,6 +7,8 @@ struct PlanView: View {
     @Query(sort: \PlannedWorkout.dayKey) private var workouts: [PlannedWorkout]
     @Query(sort: \Run.startDate, order: .reverse) private var runs: [Run]
     @Query private var plans: [TrainingPlan]
+    @Query private var goals: [Goal]
+    @Query private var profiles: [AthleteProfile]
     @State private var mode = 0
     /// Semaine affichée : 0 = la semaine en cours, -1 la précédente, +1 la suivante…
     @State private var weekOffset = 0
@@ -16,6 +18,7 @@ struct PlanView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.l) {
+                planHeader
                 Picker("Affichage", selection: $mode) {
                     Text("Semaine").tag(0)
                     Text("Mois").tag(1)
@@ -33,6 +36,68 @@ struct PlanView: View {
         }
         .rcScreenBackground()
         .navigationTitle("Plan")
+    }
+
+    // MARK: - Objectif et réglages du plan
+
+    /// L'objectif et ce qui façonne le plan, modifiables d'ici sans passer par les Réglages (demande de l'utilisateur, 2026-11-14).
+    private var planHeader: some View {
+        let goal = goals.first { $0.isActive }
+        let profile = profiles.first
+        return VStack(alignment: .leading, spacing: Spacing.m) {
+            NavigationLink(value: AppRoute.goal) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Objectif").rcLabel()
+                        Text(goal?.name ?? "Choisir un objectif")
+                            .font(.headline)
+                            .foregroundStyle(Color.rc.textPrimary)
+                        if let goal, let line = goalLine(goal) {
+                            Text(line)
+                                .font(.caption)
+                                .monospacedDigit()
+                                .foregroundStyle(Color.rc.textSecondary)
+                        }
+                    }
+                    Spacer()
+                    Text("Modifier")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.rc.accentText)
+                }
+            }
+            .buttonStyle(.plain)
+            Divider()
+            HStack(spacing: Spacing.s) {
+                NavigationLink(value: AppRoute.training) {
+                    chip("calendar", profile.map { "\($0.availableWeekdays.count) jours / sem." } ?? "Jours")
+                }
+                NavigationLink(value: AppRoute.health) {
+                    chip("cross.case", ["mild": "Gêne légère", "severe": "Douleur nette"][profile?.pain ?? "none"]
+                         ?? (profile?.fatigueLevel == "high" ? "Fatigue élevée" : "En forme"))
+                }
+            }
+            .buttonStyle(.plain)
+        }
+        .rcCard()
+    }
+
+    private func chip(_ icon: String, _ text: String) -> some View {
+        Label(text, systemImage: icon)
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(Color.rc.textPrimary)
+            .padding(.horizontal, Spacing.m)
+            .frame(minHeight: 36)
+            .background(Color.rc.surfaceRaised, in: Capsule())
+    }
+
+    /// « 16 mai 2027 · dans 183 jours · objectif 2:00:00 »
+    private func goalLine(_ goal: Goal) -> String? {
+        guard goal.kind == "race", let date = goal.raceDate else { return nil }
+        let days = DayKey.calendar.dateComponents([.day], from: DayKey.calendar.startOfDay(for: Date()), to: date).day ?? 0
+        var parts = [date.formatted(.dateTime.day().month(.wide).year().locale(Locale(identifier: "fr_FR"))),
+                     days >= 0 ? "dans \(days) jours" : "passée"]
+        if let target = goal.targetTimeS { parts.append("objectif " + Fmt.duration(target)) }
+        return parts.joined(separator: " · ")
     }
 
     // MARK: - Semaine
@@ -246,6 +311,15 @@ struct PlannedRow: View {
 /// Détail d'une séance planifiée : étapes ou exercices, explication, état d'envoi.
 struct PlannedWorkoutDetailView: View {
     let workout: PlannedWorkout
+    @Environment(CoachService.self) private var coach
+    @Environment(\.dismiss) private var dismiss
+    @State private var confirmCancel = false
+
+    /// « ma séance du mardi 17 novembre (Footing facile) »
+    private var reference: String {
+        let day = DayKey.date(workout.dayKey)?.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "fr_FR"))) ?? workout.dayKey
+        return "ma séance du \(day) (\(workout.title))"
+    }
 
     var body: some View {
         let kind = workout.kindValue
@@ -281,13 +355,30 @@ struct PlannedWorkoutDetailView: View {
                     }
                     .rcCard()
                 }
-                PrimaryButton(title: "En parler au coach", icon: "bubble.left.and.bubble.right.fill") {}
+                if workout.status == "planned" {
+                    PrimaryButton(title: "Modifier avec le coach", icon: "bubble.left.and.bubble.right.fill") {
+                        coach.pendingDraft = "Pour \(reference) : "
+                    }
+                    Button("Annuler cette séance", role: .destructive) { confirmCancel = true }
+                        .frame(maxWidth: .infinity)
+                }
             }
             .padding(Spacing.l)
         }
         .rcScreenBackground()
         .navigationTitle(kind.label)
         .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog("Annuler \(reference) ?", isPresented: $confirmCancel, titleVisibility: .visible) {
+            Button("Annuler la séance", role: .destructive) {
+                workout.status = "cancelled"
+                workout.updatedAt = Date()
+                if workout.garminWorkoutId != nil { workout.garminSyncState = "needsUpdate" }
+                dismiss()
+            }
+            Button("Garder la séance", role: .cancel) {}
+        } message: {
+            Text("Elle disparaît du plan. Pour la déplacer ou la remplacer, passe plutôt par le coach.")
+        }
     }
 }
 

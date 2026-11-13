@@ -191,17 +191,53 @@ struct HealthSettingsView: View {
 
 private struct HealthFields: View {
     @Bindable var profile: AthleteProfile
+    @Environment(CoachService.self) private var coach
+
+    private var painHelp: String {
+        switch profile.pain {
+        case "mild": return "Gêne légère ou début de douleur qui n'empêche pas de courir : plus de tempo ni de fractionné, 20 % de volume en moins. Footings, sortie longue et renfo restent possibles. Si elle persiste ou augmente, consulte un médecin ou un kiné."
+        case "severe": return "Douleur nette, qui augmente à l'effort, fait boiter ou persiste au repos : repos ou récupération de 30 min au plus, rien d'autre. Consulte un médecin ou un kiné avant de reprendre. Reviens ici quand ça va mieux."
+        default: return "Signale ici une gêne ou une douleur, et reviens la retirer quand elle a disparu. Tu peux aussi le dire au coach."
+        }
+    }
 
     var body: some View {
         Section {
-            Toggle("Douleur en ce moment", isOn: $profile.currentPain)
+            Picker("Douleur", selection: $profile.pain) {
+                Text("Aucune").tag("none")
+                Text("Gêne légère").tag("mild")
+                Text("Douleur nette").tag("severe")
+            }
+            .pickerStyle(.segmented)
+        } header: {
+            Text("Douleur en ce moment")
+        } footer: {
+            Text(painHelp)
+        }
+        Section {
             Picker("Fatigue", selection: $profile.fatigueLevel) {
                 Text("Faible").tag("low")
                 Text("Normale").tag("normal")
                 Text("Élevée").tag("high")
             }
         } footer: {
-            Text("Douleur : uniquement repos ou récupération courte jusqu'à ce que tu la retires. Fatigue élevée : pas de séance intense et 20 % de volume en moins. En cas de douleur qui persiste, consulte un médecin ou un kiné.")
+            Text("Fatigue élevée : pas de séance intense et 20 % de volume en moins.")
+        }
+        Section {
+            Button {
+                Task { await coach.generateNextWeek() }
+            } label: {
+                HStack {
+                    Text("Mettre à jour la semaine prochaine")
+                    if coach.isGenerating {
+                        Spacer()
+                        ProgressView()
+                    }
+                }
+            }
+            .disabled(coach.isGenerating)
+        } footer: {
+            Text("Le changement compte tout de suite pour le coach et pour la prochaine semaine générée. Pour adapter les séances déjà prévues cette semaine, demande-le au coach.")
         }
         Section {
             TextField("Ex. : tendinite au genou droit en 2025", text: $profile.injuryNote, axis: .vertical)

@@ -168,7 +168,8 @@ struct ReplayView: View {
         let runner = track.coordinate(atDistanceM: currentDistM)
         // Le satellite sans relief ignore l'inclinaison (constaté sur MapKit) : il reste vu du dessus.
         let follow = ReplayCamera(centerLat: runner.lat, centerLon: runner.lon,
-                                  distanceM: style == 0 ? 600 : 500, pitchDeg: style == 0 ? 0 : 60,
+        // Vues inclinées : caméra haute (1 400 m), demandée par l'utilisateur le 2026-11-14 pour voir loin devant.
+                                  distanceM: style == 0 ? 600 : 1400, pitchDeg: style == 0 ? 0 : 60,
                                   headingDeg: cameraHeading)
         guard let overview else { return follow }
         if let t = intro {
@@ -204,8 +205,8 @@ struct ReplayView: View {
                           runner: CLLocationCoordinate2D(latitude: pose.lat, longitude: pose.lon),
                           camera: camera(track),
                           style: style,
-                          behindM: following ? 600 : .infinity,
-                          aheadM: following ? 1500 : .infinity,
+                          behindM: following ? (style == 0 ? 600 : 1500) : .infinity,
+                          aheadM: following ? (style == 0 ? 1500 : 4000) : .infinity,
                           haloColor: haloColor,
                           pulse: reduceMotion ? 0.3 : beat)
                 .ignoresSafeArea()

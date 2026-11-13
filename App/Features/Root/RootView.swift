@@ -28,6 +28,7 @@ struct MainTabs: View {
     /// Décalage de l'onglet pendant le glissement de retour.
     @State private var dragX: CGFloat = 0
     @State private var keyboardVisible = false
+    @Environment(CoachService.self) private var coach
 
     var body: some View {
         GeometryReader { geo in
@@ -40,6 +41,9 @@ struct MainTabs: View {
             }
         }
         .sensoryFeedback(.selection, trigger: selection)
+        .onChange(of: coach.pendingDraft) {
+            if coach.pendingDraft != nil { selection = 3 }
+        }
         .onChange(of: selection) { old, _ in
             if isGoingBack {
                 isGoingBack = false

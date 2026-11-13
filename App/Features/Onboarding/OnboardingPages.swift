@@ -131,7 +131,7 @@ struct HealthPage: View {
                     .lineLimit(2...5)
             }
             FieldCard(label: "En ce moment") {
-                Toggle("J'ai une douleur", isOn: $draft.currentPain)
+                Toggle("J'ai une gêne ou une douleur", isOn: $draft.currentPain)
             }
             FieldCard(label: "À lire") {
                 Text("Cette app ne remplace pas un avis médical. En cas de douleur, de malaise ou de doute, arrête la séance et consulte un médecin.")

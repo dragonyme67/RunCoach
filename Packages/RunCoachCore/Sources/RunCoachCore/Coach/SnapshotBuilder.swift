@@ -25,6 +25,8 @@ public enum SnapshotBuilder {
         public var goalTargetS: Double?
         /// Sorties de course à pied (pas le renfo).
         public var runs: [RunSummary]
+        /// `mild` ou `severe` quand `currentPain` est vrai.
+        public var painLevel: String?
         /// Les sorties des 6 dernières semaines avec leur tracé, pour le bilan de forme.
         public var detailedRuns: [AnalyzedRun] = []
         public var recovery: AthleteSnapshot.Recovery
@@ -113,10 +115,11 @@ public enum SnapshotBuilder {
         let calendar = DayKey.calendar
         let age = calendar.dateComponents([.year], from: input.birthDate, to: today).year ?? 0
         let weeksRunning = max(0, (calendar.dateComponents([.day], from: input.runningSince, to: today).day ?? 0) / 7)
-        let athlete = AthleteSnapshot.Athlete(
+        var athlete = AthleteSnapshot.Athlete(
             age: age, sex: input.sex, runningSinceWeeks: weeksRunning, level: input.isBeginner ? "beginner" : "intermediate",
             injuryNote: input.injuryNote, currentPain: input.currentPain, fatigueLevel: input.fatigueLevel,
             wantsStrength: input.wantsStrength, strengthEquipment: input.strengthEquipment)
+        athlete.painLevel = input.currentPain ? (input.painLevel ?? "severe") : nil
 
         var goal = AthleteSnapshot.Goal(kind: input.goalKind)
         if input.goalKind == "race", let km = input.goalDistanceKm, let date = input.goalDate {

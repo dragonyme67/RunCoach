@@ -16,6 +16,8 @@ public enum WeekBriefBuilder {
         public var lastWeekKm: Double
         /// Jour de la course si elle tombe dans cette semaine.
         public var raceDay: String?
+        /// Gêne légère ou fatigue élevée : aucune séance intense, volume plafonné à 80 % (G11).
+        public var reducedLoad = false
 
         public init(week: MacroWeek, availableWeekdays: [Int], longRunWeekday: Int, maxSessionMin: Int,
                     wantsStrength: Bool, beginner: Bool, loadRatio: Double?, lastWeekKm: Double, raceDay: String? = nil) {
@@ -55,7 +57,12 @@ public enum WeekBriefBuilder {
             notes.append("Charge récente élevée : reste prudent sur l'intensité.")
         }
 
-        let quality = week.qualitySessions
+        var quality = week.qualitySessions
+        if input.reducedLoad {
+            quality = 0
+            maxKm = min(maxKm, (week.targetKm * 0.8 * 10).rounded() / 10)
+            notes.append("Gêne ou fatigue déclarée : aucune séance intense, volume réduit de 20 %.")
+        }
         if input.beginner && quality == 0 { notes.append("Débutant : pas de fractionné ni de tempo cette semaine.") }
 
         // Renfo : 1 séance en fondation, 2 en développement, 1 ensuite ; jamais la veille de la sortie longue.
@@ -77,7 +84,7 @@ public enum WeekBriefBuilder {
 
         return WeekBrief(
             weekStart: week.weekStart, phase: week.phase, isCutback: week.isCutback,
-            targetKm: week.targetKm, minKm: (week.targetKm * 0.8 * 10).rounded() / 10, maxKm: maxKm,
+            targetKm: week.targetKm, minKm: (week.targetKm * (input.reducedLoad ? 0.6 : 0.8) * 10).rounded() / 10, maxKm: maxKm,
             runSessions: min(week.sessions, available.count), maxQualitySessions: quality,
             longRunKm: [max(0, week.longRunKm - 1), week.longRunKm], longRunDay: longDay,
             availableDays: available, maxSessionMin: input.maxSessionMin,

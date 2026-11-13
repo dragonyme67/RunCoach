@@ -46,7 +46,7 @@ extension OnboardingDraft {
         profile.longRunWeekday = longRunWeekday
         profile.maxSessionMinutes = maxSessionMinutes
         profile.injuryNote = injuryNote
-        profile.currentPain = currentPain
+        profile.pain = currentPain ? "mild" : "none"
         profile.wantsStrength = wantsStrength
         profile.strengthEquipment = equipment
         profile.medicalDisclaimerAcceptedAt = Date()

@@ -64,6 +64,13 @@ struct CoachChatView: View {
             .padding(Spacing.l)
         }
         .defaultScrollAnchor(.bottom)
+        .onChange(of: coach.pendingDraft, initial: true) {
+            if let pending = coach.pendingDraft {
+                draft = pending
+                coach.pendingDraft = nil
+                isTyping = true
+            }
+        }
         // Le clavier cachait la barre d'onglets sans pouvoir être fermé (constat sur l'iPhone).
         .scrollDismissesKeyboard(.interactively)
         .onTapGesture { isTyping = false }
@@ -101,6 +108,11 @@ struct CoachChatView: View {
                 Button {
                     let text = draft
                     draft = ""
+                    Task {
+                        // Le clavier réinsère parfois sa correction en cours juste après l'envoi : on vide une seconde fois.
+                        try? await Task.sleep(for: .milliseconds(120))
+                        if draft == text || text.hasSuffix(draft) { draft = "" }
+                    }
                     Task { await coach.send(text) }
                 } label: {
                     Image(systemName: "arrow.up")

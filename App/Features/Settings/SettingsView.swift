@@ -26,7 +26,7 @@ struct SettingsView: View {
                     row("Toi", icon: "person.fill", value: profiles.first.map { $0.firstName.isEmpty ? "" : $0.firstName } ?? "")
                 }
                 NavigationLink(value: AppRoute.health) {
-                    row("Santé", icon: "cross.case.fill", value: profiles.first?.currentPain == true ? "Douleur déclarée" : "")
+                    row("Santé", icon: "cross.case.fill", value: ["mild": "Gêne légère", "severe": "Douleur nette"][profiles.first?.pain ?? "none"] ?? "")
                 }
             } header: {
                 Text("Ton plan")

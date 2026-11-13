@@ -34,6 +34,10 @@ public enum CoachEngine {
             return violations.isEmpty ? .success(plan) : .failure(Problems(lines: violations.map(\.description)))
         }
 
+        if snapshot.athlete.pain == "severe" {
+            return WeekResult(workouts: [], summary: nil, source: "fallback",
+                              notice: "Douleur nette déclarée : semaine de repos. Consulte un médecin ou un kiné si elle persiste, et indique dans Santé quand ça va mieux.")
+        }
         guard let llm else { return fallback(LLMError.missingKey.userMessage) }
         // Au-delà, plan de secours : un modèle saturé peut faire attendre plusieurs minutes sans rien produire.
         let deadline = Date().addingTimeInterval(150)
@@ -78,7 +82,7 @@ public enum CoachEngine {
         let briefs = briefs.map(chatBrief)
         var messages = [LLMMessage(role: "user", content: Prompts.chatMessage(
             todayLabel: todayLabel, snapshot: snapshot, upcoming: upcoming, briefs: tier == .hard ? briefs : [],
-            history: Array(history.suffix(12)), message: message))]
+            history: history.suffix(8).map { LLMMessage(role: $0.role, content: String($0.content.prefix(500))) }, message: message))]
 
         func ask() async throws -> (text: String, response: ChatResponse) {
             let text = try await llm.complete(system: Prompts.chatSystem, messages: messages, schemaName: "chat_response",
@@ -95,18 +99,50 @@ public enum CoachEngine {
             return (text, response)
         }
         /// Lignes de la carte de confirmation, ou les problèmes à faire corriger.
+        /// Seul ce que les actions introduisent ou aggravent compte : une semaine déjà hors règle (douleur déclarée
+        /// après coup, par exemple) ne bloque pas un changement sans rapport, comme l'ajout d'un renfo.
         func check(_ actions: [PlanAction]) -> Result<[String], Problems> {
             let outcome = PlanActions.apply(actions, to: planned, todayKey: todayKey)
             var problems = outcome.problems
-            let touched = Set(actions.flatMap { [$0.date] + ($0.newDate.map { [$0] } ?? []) }
-                .compactMap { DayKey.date($0).map { DayKey.key(DayKey.weekStart($0)) } })
-            for weekStart in touched.sorted() {
+            let touchedDates = Set(actions.flatMap { [$0.date] + ($0.newDate.map { [$0] } ?? []) })
+            let touchedWeeks = Set(touchedDates.compactMap { DayKey.date($0).map { DayKey.key(DayKey.weekStart($0)) } })
+            for weekStart in touchedWeeks.sorted() {
                 guard let brief = briefs.first(where: { $0.weekStart == weekStart }) else {
                     problems.append("pas de plan défini pour la semaine du \(weekStart) : aucune modification possible")
                     continue
                 }
-                let week = outcome.specs.filter { $0.date >= weekStart && $0.date < Guardrails.dayAfterWeek(weekStart) }
-                problems += Guardrails.validate(week: week, brief: brief, snapshot: snapshot).map(\.description)
+                let end = Guardrails.dayAfterWeek(weekStart)
+                let before = planned.filter { $0.date >= weekStart && $0.date < end }
+                let after = outcome.specs.filter { $0.date >= weekStart && $0.date < end }
+                let existing = Guardrails.validate(week: before, brief: brief, snapshot: snapshot)
+                func km(_ week: [WorkoutSpec]) -> Double {
+                    week.filter { $0.kind != .race }.reduce(0) { $0 + Guardrails.distanceKm($1, easyPaceSPerKm: easy) }
+                }
+                func quality(_ week: [WorkoutSpec]) -> Int { week.filter { $0.kind == .tempo || $0.kind == .intervals }.count }
+                func strength(_ week: [WorkoutSpec]) -> Int { week.filter { $0.kind == .strength }.count }
+                let moreKm = km(after) > km(before) + Guardrails.epsKm
+                let moreQuality = quality(after) > quality(before)
+                let moreDays = Set(after.map(\.date)).count > Set(before.map(\.date)).count
+                let moreStrength = strength(after) > strength(before)
+                for violation in Guardrails.validate(week: after, brief: brief, snapshot: snapshot) {
+                    let wasThere = existing.contains { $0.rule == violation.rule && $0.date == violation.date }
+                    let keep: Bool
+                    if let date = violation.date {
+                        keep = !wasThere || touchedDates.contains(date)
+                    } else if !wasThere {
+                        keep = true
+                    } else {
+                        switch violation.rule {
+                        case "G1", "G2": keep = moreKm
+                        case "G4": keep = moreQuality
+                        case "G6": keep = moreDays
+                        case "G11": keep = moreKm || moreQuality
+                        case "G13": keep = moreStrength
+                        default: keep = true
+                        }
+                    }
+                    if keep { problems.append(violation.description) }
+                }
             }
             return problems.isEmpty ? .success(outcome.lines) : .failure(Problems(lines: problems))
         }
@@ -143,8 +179,12 @@ public enum CoachEngine {
             response.profilePatch.fatigueLevel = nil
         }
         if !["none", "pain", "medical"].contains(response.safety) { response.safety = "none" }
+        if let level = response.profilePatch.painLevel, !["mild", "severe"].contains(level) {
+            response.profilePatch.painLevel = nil
+        }
         // Douleur ou symptôme déclaré : le mode prudent s'active même si l'IA a oublié le champ.
         if response.safety != "none" { response.profilePatch.currentPain = true }
+        if response.safety == "medical" { response.profilePatch.painLevel = "severe" }
         // Symptôme inquiétant : aucune séance proposée (§6.5).
         if response.safety == "medical" {
             response.actions = []
