@@ -172,10 +172,17 @@ struct GoalCard: View {
 /// Onglet Activités : liste chronologique de toutes les activités (course et renfo).
 struct RunListView: View {
     @Query(sort: \Run.startDate, order: .reverse) private var runs: [Run]
+    @Environment(SyncEngine.self) private var sync
 
     var body: some View {
         ScrollView {
             LazyVStack(spacing: Spacing.m) {
+                if runs.isEmpty {
+                    EmptyState(icon: "figure.run", title: "Aucune activité",
+                               message: sync.phase == .syncing
+                                   ? (sync.progress ?? "Import en cours…")
+                                   : "Connecte Garmin dans Réglages, puis tire l'écran vers le bas pour synchroniser.")
+                }
                 ForEach(runs) { run in
                     NavigationLink(value: run) {
                         RunRow(run: run)
@@ -186,6 +193,7 @@ struct RunListView: View {
             }
             .padding(Spacing.l)
         }
+        .refreshable { await sync.sync(background: false) }
         .rcScreenBackground()
         .navigationTitle("Activités")
     }

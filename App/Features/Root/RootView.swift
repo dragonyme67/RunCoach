@@ -3,10 +3,14 @@ import SwiftData
 
 struct RootView: View {
     let options: LaunchOptions
+    @Query private var profiles: [AthleteProfile]
 
     var body: some View {
         if let screen = options.screen {
             DebugScreen(name: screen)
+        } else if profiles.first?.medicalDisclaimerAcceptedAt == nil {
+            // L'onboarding enregistre le profil : la requête se met à jour et les onglets s'affichent.
+            OnboardingFlow(onFinish: {})
         } else {
             MainTabs()
         }

@@ -37,6 +37,8 @@ final class Run {
     var locationName: String?
     /// `summaryOnly` / `complete` / `failed`
     var detailState: String
+    /// Échecs du téléchargement des détails ; `failed` à 3.
+    var detailAttempts: Int = 0
     /// Ressenti 1 à 10, saisi par l'utilisateur.
     var perceivedEffort: Int?
     var userNote: String?
@@ -57,6 +59,38 @@ final class Run {
         self.hrZoneSeconds = []
         self.detailState = "summaryOnly"
         self.splits = []
+    }
+
+    /// Activité lue dans la liste Garmin. Sans tracé à télécharger, elle est complète tout de suite.
+    convenience init(imported a: ImportedActivity) {
+        self.init(garminActivityId: a.garminActivityId, name: a.name, startDate: a.startDate,
+                  activityType: a.activityType, distanceM: a.distanceM, durationS: a.durationS)
+        dayKey = a.dayKey
+        movingDurationS = a.movingDurationS
+        avgSpeedMps = a.avgSpeedMps
+        maxSpeedMps = a.maxSpeedMps
+        avgHR = a.avgHR
+        maxHR = a.maxHR
+        avgCadenceSpm = a.avgCadenceSpm
+        elevationGainM = a.elevationGainM
+        elevationLossM = a.elevationLossM
+        calories = a.calories
+        avgTemperatureC = a.avgTemperatureC
+        vo2max = a.vo2max
+        aerobicTE = a.aerobicTE
+        anaerobicTE = a.anaerobicTE
+        garminLoad = a.garminLoad
+        hrZoneSeconds = a.hrZoneSeconds
+        locationName = a.locationName
+        detailState = a.hasTrack ? "summaryOnly" : "complete"
+    }
+
+    /// Tracé et kilomètres tirés des détails Garmin (`nil` : activité sans GPS exploitable).
+    func applyDetails(_ samples: Track?) {
+        detailState = "complete"
+        guard let samples else { return }
+        track = RunTrack(track: samples)
+        splits = samples.kmSplits().map(Split.init(km:))
     }
 
     var paceSPerKm: Double {
@@ -94,6 +128,15 @@ final class Split {
         self.index = index
         self.distanceM = distanceM
         self.durationS = durationS
+    }
+
+    convenience init(km: KmSplit) {
+        self.init(index: km.index, distanceM: km.distanceM, durationS: km.durationS)
+        avgSpeedMps = km.avgSpeedMps
+        avgHR = km.avgHR
+        avgCadenceSpm = km.avgCadenceSpm
+        elevationGainM = km.elevationGainM
+        elevationLossM = km.elevationLossM
     }
 
     var paceSPerKm: Double {

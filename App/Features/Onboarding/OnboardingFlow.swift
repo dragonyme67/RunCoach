@@ -1,4 +1,6 @@
 import SwiftUI
+import SwiftData
+import RunCoachCore
 
 /// Réponses saisies pendant l'onboarding.
 struct OnboardingDraft {
@@ -24,11 +26,50 @@ struct OnboardingDraft {
     var equipment = "none"
 }
 
+extension OnboardingDraft {
+    /// Enregistre le profil (créé ou mis à jour) et remplace l'objectif actif.
+    func save(in context: ModelContext) {
+        let profile: AthleteProfile
+        if let existing = try? context.fetch(FetchDescriptor<AthleteProfile>()).first {
+            profile = existing
+        } else {
+            profile = AthleteProfile()
+            context.insert(profile)
+        }
+        profile.firstName = firstName
+        profile.birthDate = birthDate
+        profile.runningSince = Calendar.current.date(byAdding: .month, value: -runningMonths, to: Date()) ?? Date()
+        profile.recentRunDistanceM = recentKm * 1000
+        profile.recentRunDurationS = Double(recentMinutes * 60)
+        profile.recentRunEffort = recentEffort
+        profile.availableWeekdays = weekdays
+        profile.longRunWeekday = longRunWeekday
+        profile.maxSessionMinutes = maxSessionMinutes
+        profile.injuryNote = injuryNote
+        profile.currentPain = currentPain
+        profile.wantsStrength = wantsStrength
+        profile.strengthEquipment = equipment
+        profile.medicalDisclaimerAcceptedAt = Date()
+        profile.updatedAt = Date()
+
+        for goal in (try? context.fetch(FetchDescriptor<Goal>())) ?? [] { goal.isActive = false }
+        if hasRace {
+            let name = [21.1: "Semi-marathon", 42.2: "Marathon"][raceDistance] ?? Fmt.decimal(raceDistance, decimals: 0) + " km"
+            context.insert(Goal(kind: "race", name: name, raceDistanceM: raceDistance * 1000, raceDate: raceDate,
+                                targetTimeS: Double(targetHours * 3600 + targetMinutes * 60)))
+        } else {
+            context.insert(Goal(kind: "fitness", name: "Progresser"))
+        }
+        try? context.save()
+    }
+}
+
 /// Premier lancement : une question par page, bouton Continuer en bas.
-// shortcut: étape 1 = parcours visuel, les réponses ne sont pas enregistrées ;
-// l'étape 2 branche Garmin, l'étape 4 la clé IA et la génération du plan.
+// shortcut: la clé IA et la génération du plan arrivent à l'étape 4 ; refaire la configuration
+// repart des valeurs par défaut, pas du profil enregistré.
 struct OnboardingFlow: View {
     let onFinish: () -> Void
+    @Environment(\.modelContext) private var modelContext
     @State private var step = 0
     @State private var draft = OnboardingDraft()
 
@@ -49,6 +90,7 @@ struct OnboardingFlow: View {
             VStack(spacing: Spacing.s) {
                 PrimaryButton(title: step == lastStep ? "C'est parti" : "Continuer") {
                     if step == lastStep {
+                        draft.save(in: modelContext)
                         onFinish()
                     } else {
                         withAnimation(.rcStandard) { step += 1 }

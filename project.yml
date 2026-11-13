@@ -20,6 +20,12 @@ targets:
       - App
     dependencies:
       - package: RunCoachCore
+    # Synchro Garmin en arrière-plan (BackgroundSync.swift). Fichier généré par xcodegen, fusionné avec les clés INFOPLIST_KEY_*.
+    info:
+      path: App/Resources/Info.plist
+      properties:
+        UIBackgroundModes: [fetch]
+        BGTaskSchedulerPermittedIdentifiers: [local.runcoach.app.refresh]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: local.runcoach.app

@@ -7,7 +7,10 @@ struct TodayView: View {
     @Query(sort: \PlannedWorkout.dayKey) private var workouts: [PlannedWorkout]
     @Query(sort: \Run.startDate, order: .reverse) private var runs: [Run]
     @Query private var profiles: [AthleteProfile]
+    @Query private var syncStates: [SyncState]
+    @Environment(SyncEngine.self) private var sync
     @State private var showSettings = false
+    @State private var showGarminLogin = false
 
     private var todayKey: String { DayKey.key(Date()) }
 
@@ -24,8 +27,17 @@ struct TodayView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.l) {
                 header
+                if let message = sync.message {
+                    syncBanner(message)
+                }
                 if profiles.first?.currentPain == true {
                     painBanner
+                }
+                if !sync.isConnected && runs.isEmpty && sync.phase != .needsLogin {
+                    EmptyState(icon: "applewatch", title: "Connecte Garmin",
+                               message: "Tes sorties arrivent ici automatiquement, avec leur tracé.",
+                               actionTitle: "Connecter mon compte") { showGarminLogin = true }
+                        .rcCard()
                 }
                 if let workout = todayWorkout {
                     NavigationLink(value: workout) {
@@ -48,11 +60,38 @@ struct TodayView: View {
             }
             .padding(Spacing.l)
         }
+        .refreshable { await sync.sync(background: false) }
         .rcScreenBackground()
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showSettings) {
             NavigationStack { SettingsView() }
         }
+        .fullScreenCover(isPresented: $showGarminLogin) { GarminLoginView() }
+        .sensoryFeedback(.warning, trigger: sync.message) { _, new in new != nil }
+    }
+
+    /// Pastille : la synchro en cours, une erreur, ou « À jour » si une synchro a déjà réussi.
+    private var pillState: SyncPill.Status? {
+        switch sync.phase {
+        case .syncing: return .syncing
+        case .offline: return .offline
+        case .needsLogin, .failed: return .error
+        case .idle: return syncStates.first?.lastGarminSyncAt == nil ? nil : .upToDate
+        }
+    }
+
+    /// Session perdue : le bandeau rouvre la connexion. Autre erreur : le message seul.
+    private func syncBanner(_ message: String) -> some View {
+        Button {
+            if sync.phase == .needsLogin { showGarminLogin = true }
+        } label: {
+            Label(message, systemImage: sync.phase == .offline ? "wifi.slash" : "exclamationmark.triangle.fill")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(sync.phase == .offline ? Color.rc.textSecondary : Color.rc.danger)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .rcCard()
+        }
+        .buttonStyle(.plain)
     }
 
     private var header: some View {
@@ -65,7 +104,9 @@ struct TodayView: View {
                     .foregroundStyle(Color.rc.textPrimary)
             }
             Spacer()
-            SyncPill(state: .upToDate)
+            if let pillState {
+                SyncPill(state: pillState)
+            }
             Button {
                 showSettings = true
             } label: {
@@ -87,10 +128,13 @@ struct TodayView: View {
 
     private var restCard: some View {
         VStack(alignment: .leading, spacing: Spacing.m) {
-            Label("Repos", systemImage: "moon.zzz.fill")
+            Label(workouts.isEmpty ? "Pas encore de plan" : "Repos",
+                  systemImage: workouts.isEmpty ? "calendar.badge.clock" : "moon.zzz.fill")
                 .font(.rcTitle)
                 .foregroundStyle(Color.rc.textPrimary)
-            Text("Le repos fait partie de l'entraînement : c'est là que tu progresses.")
+            Text(workouts.isEmpty
+                 ? "Ton plan arrive avec le coach IA. En attendant, tes sorties Garmin s'affichent ici."
+                 : "Le repos fait partie de l'entraînement : c'est là que tu progresses.")
                 .font(.subheadline)
                 .foregroundStyle(Color.rc.textSecondary)
             if let next = nextWorkout {

@@ -13,7 +13,7 @@ final class ScreenshotTests: XCTestCase {
     /// (bug vu sur iPhone : la liste se rouvrait à la place du détail).
     func testOpenRunShowsItsDetail() {
         let app = XCUIApplication()
-        app.launchArguments = ["-screen", "tabs"]
+        app.launchArguments = ["-mockData", "-screen", "tabs"]
         app.launch()
         let replay = app.buttons["Rejouer"]
 
@@ -39,7 +39,7 @@ final class ScreenshotTests: XCTestCase {
         continueAfterFailure = true
         for screen in screens {
             let app = XCUIApplication()
-            app.launchArguments = ["-screen", screen, "-scheme", scheme]
+            app.launchArguments = ["-mockData", "-screen", screen, "-scheme", scheme]
             app.launch()
             XCTAssertTrue(app.wait(for: .runningForeground, timeout: 30), "\(screen) ne démarre pas")
             // Laisse le temps aux données factices, aux graphiques et à la carte de s'afficher.

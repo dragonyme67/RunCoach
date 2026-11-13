@@ -165,6 +165,9 @@ struct StrengthPage: View {
 }
 
 struct GarminPage: View {
+    @Environment(SyncEngine.self) private var sync
+    @State private var showLogin = false
+
     var body: some View {
         OnboardingPage(icon: "applewatch", title: "Garmin", subtitle: "Connecte ton compte pour importer tes sorties et recevoir tes séances sur ta montre.") {
             VStack(alignment: .leading, spacing: Spacing.m) {
@@ -177,10 +180,18 @@ struct GarminPage: View {
             .font(.subheadline)
             .foregroundStyle(Color.rc.textPrimary)
             .rcCard()
-            Text("Disponible à l'étape 2.")
-                .font(.caption)
-                .foregroundStyle(Color.rc.textSecondary)
+            if sync.isConnected {
+                Label("Compte connecté : l'import démarre", systemImage: "checkmark.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.rc.accentText)
+            } else {
+                PrimaryButton(title: "Connecter mon compte") { showLogin = true }
+                Text("Ou plus tard, dans Réglages.")
+                    .font(.caption)
+                    .foregroundStyle(Color.rc.textSecondary)
+            }
         }
+        .fullScreenCover(isPresented: $showLogin) { GarminLoginView() }
     }
 }
 

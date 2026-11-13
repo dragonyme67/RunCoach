@@ -8,7 +8,9 @@ struct SettingsView: View {
     @Query private var profiles: [AthleteProfile]
     @Query private var goals: [Goal]
     @Query private var syncStates: [SyncState]
+    @Environment(SyncEngine.self) private var sync
     @State private var showOnboarding = false
+    @State private var showGarminLogin = false
 
     var body: some View {
         Form {
@@ -40,7 +42,7 @@ struct SettingsView: View {
                 HStack {
                     Label("Compte Garmin", systemImage: "applewatch")
                     Spacer()
-                    Text("Non connecté")
+                    Text(sync.isConnected ? (syncStates.first?.garminDisplayName ?? "Connecté") : "Non connecté")
                         .foregroundStyle(Color.rc.textSecondary)
                 }
                 if let last = syncStates.first?.lastGarminSyncAt {
@@ -51,10 +53,33 @@ struct SettingsView: View {
                             .foregroundStyle(Color.rc.textSecondary)
                     }
                 }
+                if sync.phase == .syncing {
+                    HStack(spacing: Spacing.s) {
+                        ProgressView()
+                        Text(sync.progress ?? "Synchro…")
+                            .foregroundStyle(Color.rc.textSecondary)
+                    }
+                }
+                if let message = sync.message {
+                    Text(message)
+                        .foregroundStyle(Color.rc.danger)
+                }
+                if sync.isConnected {
+                    Button("Synchroniser maintenant") {
+                        Task { await sync.sync(background: false) }
+                    }
+                    .disabled(sync.phase == .syncing)
+                    Button("Se déconnecter", role: .destructive) {
+                        Task { await sync.logout() }
+                    }
+                } else {
+                    Button("Se connecter à Garmin") { showGarminLogin = true }
+                }
+                NavigationLink("Diagnostic") { GarminDiagnosticView() }
             } header: {
                 Text("Garmin")
             } footer: {
-                Text("La connexion à Garmin arrive à l'étape 2. Elle passe par un accès non officiel : Garmin peut le bloquer ou restreindre le compte.")
+                Text("Accès non officiel : Garmin peut le bloquer ou restreindre le compte. Tes identifiants sont saisis sur la page de Garmin, l'app ne les voit jamais. Se déconnecter garde les sorties déjà importées.")
             }
 
             Section {
@@ -77,12 +102,6 @@ struct SettingsView: View {
                     Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "–")
                         .foregroundStyle(Color.rc.textSecondary)
                 }
-                HStack {
-                    Text("Données")
-                    Spacer()
-                    Text("Factices (étape 1)")
-                        .foregroundStyle(Color.rc.textSecondary)
-                }
             } header: {
                 Text("À propos")
             } footer: {
@@ -101,6 +120,31 @@ struct SettingsView: View {
         .fullScreenCover(isPresented: $showOnboarding) {
             OnboardingFlow(onFinish: { showOnboarding = false })
         }
+        .fullScreenCover(isPresented: $showGarminLogin) { GarminLoginView() }
+    }
+}
+
+/// Journal de la connexion et des synchros, pour diagnostiquer sans débogueur (ARCHITECTURE.md §9.5).
+/// Hôtes, chemins et codes HTTP seulement : jamais de ticket, de jeton ni de paramètre de requête.
+struct GarminDiagnosticView: View {
+    @Environment(SyncEngine.self) private var sync
+
+    var body: some View {
+        List {
+            if sync.diagnostics.isEmpty {
+                Text("Rien depuis l'ouverture de l'app.")
+                    .foregroundStyle(Color.rc.textSecondary)
+            }
+            ForEach(Array(sync.diagnostics.enumerated().reversed()), id: \.offset) { _, line in
+                Text(line)
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .rcScreenBackground()
+        .navigationTitle("Diagnostic")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

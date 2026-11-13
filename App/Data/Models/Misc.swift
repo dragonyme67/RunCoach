@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import RunCoachCore
 
 /// Métriques quotidiennes Garmin (sommeil, HRV, VO2max…). Toutes optionnelles.
 @Model
@@ -17,6 +18,15 @@ final class DailyMetric {
 
     init(dayKey: String) {
         self.dayKey = dayKey
+    }
+
+    /// N'écrase une valeur connue que par une autre valeur : un jour relu sans statut garde le sien.
+    func apply(_ m: ImportedDailyMetric) {
+        if let v = m.sleepSeconds { sleepSeconds = v }
+        if let v = m.sleepScore { sleepScore = v }
+        if let v = m.restingHR { restingHR = v }
+        if let v = m.vo2max { vo2max = v }
+        if let v = m.trainingStatus { trainingStatus = v }
     }
 }
 

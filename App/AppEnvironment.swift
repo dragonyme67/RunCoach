@@ -1,9 +1,11 @@
 import SwiftUI
 import SwiftData
 
-/// Options de lancement utilisées par les captures d'écran de la CI :
-/// `-screen <nom>` affiche directement un écran, `-scheme light|dark` force l'apparence.
+/// Options de lancement utilisées par les captures d'écran de la CI : `-mockData` remplace la vraie base
+/// par des données factices en mémoire, `-screen <nom>` affiche directement un écran,
+/// `-scheme light|dark` force l'apparence.
 struct LaunchOptions {
+    var mockData = false
     var screen: String?
     var colorScheme: ColorScheme?
 
@@ -14,6 +16,7 @@ struct LaunchOptions {
             return args[i + 1]
         }
         var options = LaunchOptions()
+        options.mockData = args.contains("-mockData")
         options.screen = value(after: "-screen")
         switch value(after: "-scheme") {
         case "dark": options.colorScheme = .dark
@@ -30,14 +33,13 @@ enum AppEnvironment {
         DailyMetric.self, TrainingPlan.self, PlannedWorkout.self, ChatMessage.self, SyncState.self
     ])
 
-    // shortcut: base en mémoire remplie de données factices à chaque lancement ;
-    // l'étape 2 passe à une base persistante et garde ce mode derrière `-mockData`.
+    /// Base persistante sur l'iPhone ; en mémoire et remplie de données factices avec `-mockData`.
     @MainActor
-    static func makeContainer() -> ModelContainer {
-        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+    static func makeContainer(mock: Bool) -> ModelContainer {
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: mock)
         do {
             let container = try ModelContainer(for: schema, configurations: [configuration])
-            MockData.seed(into: container.mainContext)
+            if mock { MockData.seed(into: container.mainContext) }
             return container
         } catch {
             fatalError("Impossible de créer la base locale : \(error)")
