@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import RunCoachCore
 
 /// Carte du replay, plan B de l'étape 3 (ARCHITECTURE.md §8) : `MKMapView` piloté directement.
 /// Avec la carte SwiftUI en relief, la caméra envoyée à chaque image n'était pas appliquée (constat sur l'iPhone,
@@ -74,26 +75,35 @@ final class ReplayMapContainer: UIView {
             map.preferredConfiguration = Self.configuration(style)
         }
         let tilted = state.style == 0
+        let distanceM = tilted ? 500.0 : 600.0
+        let pitch = tilted ? 60.0 : 0.0
         // Sans animation : la caméra est appliquée tout de suite, la projection ci-dessous l'utilise.
-        map.setCamera(MKMapCamera(lookingAtCenter: state.runner, fromDistance: tilted ? 500 : 600,
-                                  pitch: tilted ? 60 : 0, heading: state.heading), animated: false)
+        map.setCamera(MKMapCamera(lookingAtCenter: state.runner, fromDistance: distanceM,
+                                  pitch: pitch, heading: state.heading), animated: false)
         guard bounds.width > 0 else { return }
 
         let doneLine = UIBezierPath(), aheadLine = UIBezierPath()
         let runnerPoint = map.convert(state.runner, toPointTo: self)
         aheadLine.move(to: runnerPoint)
-        var doneStarted = false
+        var donePenDown = false, aheadPenDown = true
         for i in state.coordinates.indices {
             let d = state.distances[i]
             guard d > state.currentDistM - behindM, d < state.currentDistM + aheadM else { continue }
-            let point = map.convert(state.coordinates[i], toPointTo: self)
-            if d <= state.currentDistM {
-                if doneStarted { doneLine.addLine(to: point) } else { doneLine.move(to: point); doneStarted = true }
-            } else {
-                aheadLine.addLine(to: point)
+            let isDone = d <= state.currentDistM
+            let c = state.coordinates[i]
+            // Un point derrière la caméra inclinée est projeté n'importe où : il coupe le trait au lieu d'y entrer.
+            guard ReplayDirector.isInFrontOfCamera(lat: c.latitude, lon: c.longitude,
+                                                   centerLat: state.runner.latitude, centerLon: state.runner.longitude,
+                                                   headingDeg: state.heading, cameraDistanceM: distanceM, pitchDeg: pitch) else {
+                if isDone { donePenDown = false } else { aheadPenDown = false }
+                continue
             }
+            let point = map.convert(c, toPointTo: self)
+            let line = isDone ? doneLine : aheadLine
+            if isDone ? donePenDown : aheadPenDown { line.addLine(to: point) } else { line.move(to: point) }
+            if isDone { donePenDown = true } else { aheadPenDown = true }
         }
-        if doneStarted { doneLine.addLine(to: runnerPoint) }
+        if donePenDown { doneLine.addLine(to: runnerPoint) }
 
         // Pas d'animation implicite des calques : le tracé suit la carte image par image.
         CATransaction.begin()

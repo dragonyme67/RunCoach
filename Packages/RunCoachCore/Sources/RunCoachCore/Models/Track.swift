@@ -66,6 +66,50 @@ public struct Track: Codable, Equatable, Sendable {
         )
     }
 
+    /// Indice fractionnaire du relevé où la distance parcourue vaut `distanceM` (recherche dichotomique).
+    /// Pendant un arrêt la distance ne change pas : on prend la fin de l'arrêt, que le replay saute ainsi.
+    public func index(atDistanceM distanceM: Double) -> Double {
+        let n = dist.count
+        guard n > 1, distanceM > dist[0] else { return 0 }
+        guard distanceM < dist[n - 1] else { return Double(n - 1) }
+        var lo = 0, hi = n - 1
+        while hi - lo > 1 {
+            let mid = (lo + hi) / 2
+            if dist[mid] <= distanceM { lo = mid } else { hi = mid }
+        }
+        let span = dist[hi] - dist[lo]
+        return Double(lo) + (span > 0 ? (distanceM - dist[lo]) / span : 0)
+    }
+
+    /// Position interpolée à la distance parcourue `distanceM`.
+    public func coordinate(atDistanceM distanceM: Double) -> (lat: Double, lon: Double) {
+        let n = min(lat.count, lon.count)
+        guard n > 1 else { return (lat.first ?? 0, lon.first ?? 0) }
+        let x = min(index(atDistanceM: distanceM), Double(n - 1))
+        let i = min(n - 2, Int(x))
+        let f = x - Double(i)
+        return (lat[i] + (lat[i + 1] - lat[i]) * f, lon[i] + (lon[i + 1] - lon[i]) * f)
+    }
+
+    /// Direction (degrés) d'un point situé `aheadM` mètres plus loin sur le tracé : ce que la caméra vise.
+    /// En fin de sortie, la direction des derniers `aheadM` mètres.
+    public func bearing(atDistanceM distanceM: Double, aheadM: Double) -> Double {
+        guard let first = dist.first, let last = dist.last, last > first else { return 0 }
+        let to = min(last, distanceM + aheadM)
+        let from = max(first, min(distanceM, to - aheadM))
+        let a = coordinate(atDistanceM: from), b = coordinate(atDistanceM: to)
+        return Self.bearing(fromLat: a.lat, fromLon: a.lon, toLat: b.lat, toLon: b.lon)
+    }
+
+    static func bearing(fromLat: Double, fromLon: Double, toLat: Double, toLon: Double) -> Double {
+        let lat1 = fromLat * .pi / 180, lat2 = toLat * .pi / 180
+        let dLon = (toLon - fromLon) * .pi / 180
+        let y = sin(dLon) * cos(lat2)
+        let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
+        let degrees = atan2(y, x) * 180 / .pi
+        return degrees < 0 ? degrees + 360 : degrees
+    }
+
     /// Positions lissées pour l'affichage : moyenne des relevés à ±`windowM` mètres de parcours.
     /// Le GPS d'une montre ondule de quelques mètres de part et d'autre du vrai chemin ; avec un relevé tous les
     /// 2 à 3 m, le trait relie ces écarts et zigzague. Fenêtre symétrique : le départ et l'arrivée ne bougent pas.

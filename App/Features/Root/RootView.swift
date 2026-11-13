@@ -89,9 +89,9 @@ struct DebugScreen: View {
         case "activities":
             NavigationStack { RunListView().rcDestinations() }
         case "replay":
-            if let run = runs.first(where: { !$0.isStrength }) { ReplayView(run: run) }
+            if let run = runs.first(where: { !$0.isStrength }) { ReplayView(run: run, progress: 0.4) }
         case "replaymap":
-            if let run = runs.first(where: { !$0.isStrength }) { ReplayView(run: run, style: 2) }
+            if let run = runs.first(where: { !$0.isStrength }) { ReplayView(run: run, style: 2, progress: 0.4) }
         case "coach":
             NavigationStack { CoachChatView() }
         case "progress":

@@ -6,19 +6,21 @@ import RunCoachCore
 /// Replay d'une sortie : carte qui tourne avec le coureur (il avance toujours vers le haut de l'écran).
 /// Par défaut, vue inclinée en relief ; le tracé est dessiné par-dessus la carte (`ReplayMapView`) :
 /// posé sur la carte, il disparaissait sous les arbres et bâtiments 3D.
-/// Fluidité : la position est interpolée entre deux relevés à chaque image.
-// shortcut: la lecture avance à 30 fois le temps réel sur l'indice des relevés, supposés réguliers ;
-// l'étape 3 la cale sur les horodatages réels si les relevés Garmin ne le sont pas (ARCHITECTURE.md §8).
+/// Fluidité : la lecture avance à vitesse constante sur la distance (marche et arrêts ne la ralentissent pas),
+/// la position est interpolée à chaque image, et la caméra tourne en douceur vers un point situé devant.
 struct ReplayView: View {
     let run: Run
     /// 0 = incliné en relief, 1 = satellite à plat, 2 = plan.
     @State var style = 0
+    /// Position de lecture, fraction des relevés (0 = départ).
+    @State var progress: Double = 0
+    /// Cap de la caméra, lissé (`ReplayDirector.smoothHeading`).
+    @State private var cameraHeading: Double = 0
     /// Indices des points dessinés en surimpression : un tous les 12 m environ.
     @State private var overlayIndices: [Int] = []
     @Environment(\.dismiss) private var dismiss
     @State private var track: Track?
     @State private var coordinates: [CLLocationCoordinate2D] = []
-    @State private var progress: Double = 0.4
     @State private var isPlaying = false
     @State private var speed = 1
     @State private var metric = 0
@@ -48,6 +50,11 @@ struct ReplayView: View {
             coordinates = RouteMap.coordinates(loaded)
             overlayIndices = Self.overlayIndices(loaded?.dist ?? [], stepM: 12)
             chartPoints = makeChartPoints()
+            cameraHeading = targetHeading
+        }
+        .onChange(of: progress) {
+            // Barre déplacée à la main, lecture en pause : la caméra se tourne directement dans le bon sens.
+            if !isPlaying { cameraHeading = targetHeading }
         }
         .onChange(of: metric) {
             chartPoints = makeChartPoints()
@@ -68,11 +75,19 @@ struct ReplayView: View {
             Color.clear.onChange(of: context.date) { old, new in
                 // Borné : à la reprise après une pause, l'écart entre deux dates vaut toute la pause.
                 let elapsedS = min(0.1, new.timeIntervalSince(old))
-                let durationS = max(60, track?.t.last ?? run.durationS)
-                progress = min(1, progress + elapsedS * 30 * Double(speed) / durationS)
-                if progress >= 1 { isPlaying = false }
+                guard let track, let start = track.dist.first, let end = track.dist.last, end > start else { return }
+                let playS = ReplayDirector.playbackDurationS(runDurationS: track.t.last ?? run.durationS)
+                let distanceM = min(end, currentDistM + elapsedS * Double(speed) * (end - start) / playS)
+                progress = track.index(atDistanceM: distanceM) / Double(max(1, track.dist.count - 1))
+                cameraHeading = ReplayDirector.smoothHeading(cameraHeading, toward: targetHeading, dt: elapsedS)
+                if distanceM >= end { isPlaying = false }
             }
         }
+    }
+
+    /// Cap visé : la direction d'un point situé un peu plus loin sur le tracé.
+    private var targetHeading: Double {
+        track?.bearing(atDistanceM: currentDistM, aheadM: ReplayDirector.lookAheadM) ?? 0
     }
 
     @ViewBuilder
@@ -83,7 +98,7 @@ struct ReplayView: View {
                           distances: overlayIndices.map { track.dist[$0] },
                           currentDistM: currentDistM,
                           runner: CLLocationCoordinate2D(latitude: pose.lat, longitude: pose.lon),
-                          heading: pose.heading,
+                          heading: cameraHeading,
                           style: style)
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
