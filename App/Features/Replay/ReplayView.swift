@@ -98,6 +98,8 @@ struct ReplayView: View {
                     }
                 }
                 .mapStyle(mapStyle)
+                // Pas de boussole : elle chevauchait les boutons, et la carte tourne de toute façon avec le coureur.
+                .mapControls {}
                 // La surimpression se recale sur la caméra réellement affichée, pas sur celle demandée.
                 .onMapCameraChange(frequency: .continuous) { cameraTick &+= 1 }
                 if style == 0, let track {
