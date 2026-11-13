@@ -19,6 +19,9 @@ struct ReplayMapView: UIViewRepresentable {
     /// Partie du tracé dessinée, derrière et devant le coureur (tout le tracé pendant l'entrée et la sortie).
     let behindM: Double
     let aheadM: Double
+    /// Halo du coureur : couleur de sa zone cardiaque ; `pulse` de 0 à 1 dans le battement en cours.
+    let haloColor: UIColor
+    let pulse: Double
 
     func makeUIView(context: Context) -> ReplayMapContainer { ReplayMapContainer() }
 
@@ -29,7 +32,7 @@ final class ReplayMapContainer: UIView {
     private let map = MKMapView()
     private let aheadHalo = CAShapeLayer(), ahead = CAShapeLayer()
     private let doneHalo = CAShapeLayer(), done = CAShapeLayer()
-    private let dot = CAShapeLayer()
+    private let halo = CAShapeLayer(), dot = CAShapeLayer()
     private var current: ReplayMapView?
     private var style = -1
 
@@ -52,10 +55,13 @@ final class ReplayMapContainer: UIView {
             layer.lineJoin = .round
             self.layer.addSublayer(layer)
         }
+        let disc = UIBezierPath(ovalIn: CGRect(x: -13, y: -13, width: 26, height: 26)).cgPath
+        halo.path = disc
+        layer.addSublayer(halo)
         dot.fillColor = accent
         dot.strokeColor = UIColor.white.cgColor
         dot.lineWidth = 4
-        dot.path = UIBezierPath(ovalIn: CGRect(x: -13, y: -13, width: 26, height: 26)).cgPath
+        dot.path = disc
         layer.addSublayer(dot)
     }
 
@@ -112,6 +118,11 @@ final class ReplayMapContainer: UIView {
         doneHalo.path = doneLine.cgPath
         done.path = doneLine.cgPath
         dot.position = runnerPoint
+        // Onde qui part du point et s'efface, une par battement.
+        halo.position = runnerPoint
+        halo.fillColor = state.haloColor.cgColor
+        halo.opacity = Float(0.7 * (1 - state.pulse))
+        halo.setAffineTransform(CGAffineTransform(scaleX: 1 + 1.4 * state.pulse, y: 1 + 1.4 * state.pulse))
         CATransaction.commit()
     }
 

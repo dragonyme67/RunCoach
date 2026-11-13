@@ -1,17 +1,20 @@
 import SwiftUI
 import MapKit
 import Charts
+import SwiftData
 import RunCoachCore
 
 /// Replay d'une sortie : carte qui tourne avec le coureur (il avance toujours vers le haut de l'écran).
-/// Par défaut, satellite incliné sans relief ; le tracé est dessiné par-dessus la carte (`ReplayMapView`).
+/// Par défaut, satellite vu du dessus ; le tracé est dessiné par-dessus la carte (`ReplayMapView`).
 /// Entrée : vue d'ensemble du tracé, puis descente vers le départ ; la lecture démarre seule.
 /// Sortie : remontée vers la vue d'ensemble et carte de bilan (ARCHITECTURE.md §8, 3.2).
 /// Fluidité : la lecture avance à vitesse constante sur la distance (marche et arrêts ne la ralentissent pas),
 /// la position est interpolée à chaque image, et la caméra tourne en douceur vers un point situé devant.
+/// Effets (3.3, 3.4 en partie) : halo qui bat au rythme cardiaque dans la couleur de la zone, bulle à chaque
+/// kilomètre avec un léger retour haptique, bandeau réduit à une ligne pendant la lecture.
 struct ReplayView: View {
     let run: Run
-    /// 0 = satellite incliné sans relief, 1 = relief 3D, 2 = plan.
+    /// 0 = satellite vu du dessus, 1 = relief 3D, 2 = plan incliné.
     @State var style = 0
     /// Position de lecture, fraction des relevés (0 = départ).
     @State var progress: Double = 0
@@ -29,13 +32,24 @@ struct ReplayView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var track: Track?
     @State private var coordinates: [CLLocationCoordinate2D] = []
-    @State private var isPlaying = false
+    @State var isPlaying = false
     @State private var speed = 1
     @State private var metric = 0
     @State private var streetScene: MKLookAroundScene?
     @State private var showStreet = false
     @State private var noStreet = false
     @State private var chartPoints: [ChartPoint] = []
+    @Query private var profiles: [AthleteProfile]
+    /// Relevé affiché dans le bandeau : rafraîchi 4 fois par seconde au plus, pour que les chiffres restent lisibles.
+    @State private var hudIndex = 0
+    @State private var hudAgeS: Double = 0
+    /// Position dans le battement de cœur en cours, de 0 à 1 (halo du coureur).
+    @State private var beat: Double = 0
+    /// Kilomètre qui vient d'être franchi, affiché 2 s au-dessus du coureur.
+    @State private var kmBubble: Int?
+    @State private var kmBubbleAgeS: Double = 0
+    /// Pendant la lecture, bandeau réduit à une ligne ; toucher la carte l'agrandit ou le réduit.
+    @State private var compact = true
 
     private var index: Int {
         guard coordinates.count > 1 else { return 0 }
@@ -48,7 +62,10 @@ struct ReplayView: View {
             closeButton
         }
         .safeAreaInset(edge: .bottom) {
-            if showSummary { summary } else { panel }
+            Group {
+                if showSummary { summary } else if isPlaying && compact { compactPanel } else { panel }
+            }
+            .animation(.rcStandard, value: isPlaying && compact)
         }
         .background { clock }
         .task {
@@ -60,12 +77,16 @@ struct ReplayView: View {
             overview = loaded.map { ReplayDirector.overview(of: $0, viewAspect: 0.46) }
             chartPoints = makeChartPoints()
             cameraHeading = targetHeading
+            hudIndex = index
             // « Réduire les animations » d'iOS : pas de séquence d'entrée.
             if reduceMotion { intro = nil }
         }
         .onChange(of: progress) {
             // Barre déplacée à la main, lecture en pause : la caméra se tourne directement dans le bon sens.
-            if !isPlaying { cameraHeading = targetHeading }
+            if !isPlaying {
+                cameraHeading = targetHeading
+                hudIndex = index
+            }
         }
         .onChange(of: metric) {
             chartPoints = makeChartPoints()
@@ -78,6 +99,7 @@ struct ReplayView: View {
         }
         .sensoryFeedback(.selection, trigger: speed)
         .sensoryFeedback(.selection, trigger: style)
+        .sensoryFeedback(.impact(weight: .light), trigger: kmBubble) { _, new in new != nil }
     }
 
     /// Horloge de lecture, calée sur le rafraîchissement de l'écran.
@@ -113,11 +135,30 @@ struct ReplayView: View {
             return
         }
         let playS = ReplayDirector.playbackDurationS(runDurationS: track.t.last ?? run.durationS)
-        let distanceM = min(end, currentDistM + elapsedS * Double(speed) * (end - start) / playS)
+        let before = currentDistM
+        let distanceM = min(end, before + elapsedS * Double(speed) * (end - start) / playS)
         progress = track.index(atDistanceM: distanceM) / Double(max(1, track.dist.count - 1))
         cameraHeading = ReplayDirector.smoothHeading(cameraHeading, toward: targetHeading, dt: elapsedS)
+
+        hudAgeS += elapsedS
+        if hudAgeS >= 0.25 {
+            hudAgeS = 0
+            withAnimation(.rcStandard) { hudIndex = index }
+        }
+        // Le halo bat au rythme réel du cœur à cet endroit, pas à la vitesse de lecture.
+        if !reduceMotion, let hr = track.hr, index < hr.count {
+            beat = (beat + elapsedS * hr[index] / 60).truncatingRemainder(dividingBy: 1)
+        }
+        if Int(distanceM / 1000) > Int(before / 1000) {
+            withAnimation(.rcStandard) { kmBubble = Int(distanceM / 1000) }
+            kmBubbleAgeS = 0
+        } else if kmBubble != nil {
+            kmBubbleAgeS += elapsedS
+            if kmBubbleAgeS >= 2 { withAnimation(.rcStandard) { kmBubble = nil } }
+        }
         if distanceM >= end {
             isPlaying = false
+            kmBubble = nil
             if reduceMotion { showSummary = true } else { outro = 0 }
         }
     }
@@ -164,12 +205,54 @@ struct ReplayView: View {
                           camera: camera(track),
                           style: style,
                           behindM: following ? 600 : .infinity,
-                          aheadM: following ? 1500 : .infinity)
+                          aheadM: following ? 1500 : .infinity,
+                          haloColor: haloColor,
+                          pulse: reduceMotion ? 0.3 : beat)
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
+                .overlay {
+                    // Le coureur est au centre de la carte, qui occupe tout l'écran : la bulle est juste au-dessus.
+                    if let km = kmBubble {
+                        Text(kmText(km))
+                            .font(.rcHeadline)
+                            .monospacedDigit()
+                            .foregroundStyle(Color.white)
+                            .padding(.horizontal, Spacing.m)
+                            .padding(.vertical, Spacing.s)
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .environment(\.colorScheme, .dark)
+                            .offset(y: -52)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .ignoresSafeArea()
+                            .transition(.opacity)
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if isPlaying { compact.toggle() }
+                }
         } else {
             Color.rc.background.ignoresSafeArea()
         }
+    }
+
+    /// Couleur de la zone cardiaque du moment ; sans FC ou sans profil, pas de halo.
+    private var haloColor: UIColor {
+        guard let hr = track?.hr, hudIndex < hr.count, let maxBpm else { return .clear }
+        return UIColor(Color.rc.zone(HeartZones.zone(bpm: hr[hudIndex], maxBpm: maxBpm)))
+    }
+
+    /// FC max : saisie dans le profil, sinon estimée par l'âge (ARCHITECTURE.md §6.3).
+    private var maxBpm: Double? {
+        guard let profile = profiles.first else { return nil }
+        if let hrMax = profile.hrMax { return Double(hrMax) }
+        return HeartZones.estimatedMaxBpm(ageYears: profile.birthDate.distance(to: Date()) / (365.25 * 86_400))
+    }
+
+    /// « km 3 · 6:19 » : le kilomètre franchi et son allure.
+    private func kmText(_ km: Int) -> String {
+        guard let split = run.sortedSplits.first(where: { $0.index == km }) else { return "km \(km)" }
+        return "km \(km) · \(Fmt.pace(sPerKm: split.paceSPerKm))"
     }
 
     /// Distance parcourue à la position de lecture, interpolée entre deux relevés comme `Track.pose(at:)`.
@@ -289,26 +372,73 @@ struct ReplayView: View {
                 .pickerStyle(.segmented)
                 .frame(width: 150)
                 Spacer()
-                Button {
-                    if progress >= 1 { progress = 0 }
-                    // Pendant l'entrée : on la saute et la lecture démarre tout de suite.
-                    if intro != nil {
-                        intro = nil
-                        isPlaying = true
-                    } else {
-                        isPlaying.toggle()
-                    }
-                } label: {
-                    Image(systemName: isPlaying || intro != nil ? "pause.fill" : "play.fill")
-                        .font(.title2)
-                        .foregroundStyle(Color.rc.onAccent)
-                        .frame(width: 60, height: 60)
-                        .background(Color.rc.accent, in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(isPlaying ? "Pause" : "Lecture")
+                playButton(size: 60)
             }
         }
+    }
+
+    private func playButton(size: CGFloat) -> some View {
+        Button {
+            if progress >= 1 { progress = 0 }
+            // Pendant l'entrée : on la saute et la lecture démarre tout de suite.
+            if intro != nil {
+                intro = nil
+                isPlaying = true
+            } else {
+                isPlaying.toggle()
+            }
+        } label: {
+            Image(systemName: isPlaying || intro != nil ? "pause.fill" : "play.fill")
+                .font(size < 60 ? .headline : .title2)
+                .foregroundStyle(Color.rc.onAccent)
+                .frame(width: size, height: size)
+                .background(Color.rc.accent, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isPlaying ? "Pause" : "Lecture")
+    }
+
+    /// Bandeau réduit pendant la lecture : une ligne de chiffres ; la toucher rouvre le bandeau complet.
+    private var compactPanel: some View {
+        HStack(spacing: Spacing.m) {
+            Button {
+                compact = false
+            } label: {
+                HStack(spacing: Spacing.m) {
+                    compactStat(Fmt.pace(speedMps: value(track?.speed)), unit: "/km")
+                    compactStat(number(track?.hr), unit: "bpm")
+                    compactStat(Fmt.km(value(track?.dist)), unit: "km")
+                    compactStat(Fmt.duration(value(track?.t)), unit: "")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+            .accessibilityHint("Affiche le détail")
+            playButton(size: 44)
+        }
+        .padding(.horizontal, Spacing.l)
+        .padding(.vertical, Spacing.s)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .padding(.horizontal, Spacing.s)
+        .environment(\.colorScheme, .dark)
+    }
+
+    private func compactStat(_ value: String, unit: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 2) {
+            Text(value)
+                .font(.rcHeadline)
+                .monospacedDigit()
+                .foregroundStyle(Color.white)
+                .contentTransition(.numericText())
+            if !unit.isEmpty {
+                Text(unit)
+                    .font(.caption2)
+                    .foregroundStyle(Color.white.opacity(0.65))
+            }
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
     }
 
     /// Bilan de fin : la sortie en quatre chiffres, puis Revoir ou Fermer.
@@ -360,13 +490,13 @@ struct ReplayView: View {
     }
 
     private func value(_ column: [Double]?) -> Double {
-        guard let column = column, index < column.count else { return 0 }
-        return column[index]
+        guard let column = column, hudIndex < column.count else { return 0 }
+        return column[hudIndex]
     }
 
     private func number(_ column: [Double]?) -> String {
-        guard let column = column, index < column.count else { return "–" }
-        return "\(Int(column[index].rounded()))"
+        guard let column = column, hudIndex < column.count else { return "–" }
+        return "\(Int(column[hudIndex].rounded()))"
     }
 }
 
