@@ -14,7 +14,7 @@ struct ReplayMapView: UIViewRepresentable {
     let currentDistM: Double
     let runner: CLLocationCoordinate2D
     let camera: ReplayCamera
-    /// 0 = satellite incliné sans relief, 1 = relief 3D, 2 = plan.
+    /// 0 = satellite vu du dessus, 1 = relief 3D incliné, 2 = plan incliné sans relief.
     let style: Int
     /// Partie du tracé dessinée, derrière et devant le coureur (tout le tracé pendant l'entrée et la sortie).
     let behindM: Double
@@ -115,8 +115,9 @@ final class ReplayMapContainer: UIView {
         CATransaction.commit()
     }
 
-    /// Satellite sans relief : aucun arbre ni bâtiment 3D, donc un trait dessiné au-dessus reste exactement
-    /// sur le sol. Avec le relief, le trait (au sol) glissait sur les objets 3D quand la caméra bougeait.
+    /// Sans relief : aucun arbre ni bâtiment 3D, donc un trait dessiné au-dessus reste exactement sur le sol.
+    /// Avec le relief, le trait (au sol) glisse sur les objets 3D quand la caméra bouge (constat sur l'iPhone).
+    /// Le satellite sans relief ignore l'inclinaison (capture de la CI, MapKit, 2026-11-13).
     private static func configuration(_ style: Int) -> MKMapConfiguration {
         switch style {
         case 0:

@@ -125,8 +125,9 @@ struct ReplayView: View {
     /// Caméra du moment : suivi du coureur, ou passage vers et depuis la vue d'ensemble.
     private func camera(_ track: Track) -> ReplayCamera {
         let runner = track.coordinate(atDistanceM: currentDistM)
+        // Le satellite sans relief ignore l'inclinaison (constaté sur MapKit) : il reste vu du dessus.
         let follow = ReplayCamera(centerLat: runner.lat, centerLon: runner.lon,
-                                  distanceM: style == 2 ? 600 : 500, pitchDeg: style == 2 ? 0 : 60,
+                                  distanceM: style == 0 ? 600 : 500, pitchDeg: style == 0 ? 0 : 60,
                                   headingDeg: cameraHeading)
         guard let overview else { return follow }
         if let t = intro {
@@ -205,7 +206,7 @@ struct ReplayView: View {
             mapButton(["globe.europe.africa.fill", "view.3d", "map.fill"][style], label: "Style de carte") {
                 style = (style + 1) % 3
             }
-            .accessibilityValue(["Satellite incliné", "Relief 3D", "Plan"][style])
+            .accessibilityValue(["Satellite vu du dessus", "Relief 3D", "Plan incliné"][style])
         }
         .padding(.horizontal, Spacing.l)
     }

@@ -38,9 +38,10 @@ final class ReplayDirectorTests: XCTestCase {
 
     func testOverviewFramesTheWholeTrack() {
         // 2 km vers le nord.
-        let track = Track(t: [0, 1], lat: [48, 48 + 2000 / 111_320], lon: [2, 2], dist: [0, 2000])
+        let north: Double = 2000 / 111_320
+        let track = Track(t: [0, 1], lat: [48, 48 + north], lon: [2, 2], dist: [0, 2000])
         let camera = ReplayDirector.overview(of: track, viewAspect: 0.5)
-        XCTAssertEqual(camera.centerLat, 48 + 1000 / 111_320, accuracy: 1e-9)
+        XCTAssertEqual(camera.centerLat, 48 + north / 2, accuracy: 1e-9)
         XCTAssertEqual(camera.distanceM, 5200, accuracy: 1)
         XCTAssertEqual(camera.pitchDeg, 0)
         XCTAssertEqual(camera.headingDeg, 0)
