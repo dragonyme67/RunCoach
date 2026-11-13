@@ -16,9 +16,13 @@ public enum MacroPlanner {
         public var availableDays: Int
         /// Court depuis moins de 6 mois.
         public var beginner: Bool
+        /// Semaines déjà écoulées depuis le début du plan : le plan est recalculé chaque semaine sur le volume
+        /// réellement couru, et l'allègement doit rester une semaine sur quatre depuis le début.
+        public var cycleOffset: Int
 
         public init(startWeek: Date, raceDate: Date?, raceDistanceKm: Double?, v0Km: Double, l0Km: Double,
-                    availableDays: Int, beginner: Bool) {
+                    availableDays: Int, beginner: Bool, cycleOffset: Int = 0) {
+            self.cycleOffset = cycleOffset
             self.startWeek = startWeek
             self.raceDate = raceDate
             self.raceDistanceKm = raceDistanceKm
@@ -54,7 +58,7 @@ public enum MacroPlanner {
                 km = 0.40 * (weeks.isEmpty ? input.v0Km : maxVolume)
                 longKm = 0
             case .base, .build, .peak:
-                cutback = w % 4 == 3
+                cutback = (w + input.cycleOffset) % 4 == 3
                 if cutback {
                     km = 0.75 * volume
                 } else {

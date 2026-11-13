@@ -56,7 +56,26 @@ public enum CoachSchemas {
 }
 
 extension CoachSchemas {
-    /// Réponse du chat (`ChatResponse`). Sans `actions` pour l'instant : le chat répond, il ne modifie pas encore le plan.
+    /// Réponse du chat avec modifications du plan (§5.3.2) : questions d'entraînement, de plan ou de santé.
+    public static var chatWithActions: String {
+        #"""
+        {"type":"object","additionalProperties":false,"required":["reply","actions","profile_patch","safety"],
+         "properties":{"reply":{"type":"string"},
+                       "actions":{"type":"array","items":{"type":"object","additionalProperties":false,
+                                  "required":["op","date","new_date","workout"],
+                                  "properties":{"op":{"type":"string","enum":["add","replace","remove","move"]},
+                                                "date":{"type":"string"},"new_date":{"type":["string","null"]},
+                                                "workout":{"anyOf":[\#(workout),{"type":"null"}]}}}},
+                       "profile_patch":{"type":"object","additionalProperties":false,
+                                        "required":["current_pain","fatigue_level","injury_note"],
+                                        "properties":{"current_pain":{"type":["boolean","null"]},
+                                                      "fatigue_level":{"type":["string","null"]},
+                                                      "injury_note":{"type":["string","null"]}}},
+                       "safety":{"type":"string","enum":["none","pain","medical"]}}}
+        """#
+    }
+
+    /// Réponse du chat pour un simple échange, sans modification du plan (schéma plus court, moins de jetons).
     public static let chat = #"""
     {"type":"object","additionalProperties":false,"required":["reply","profile_patch","safety"],
      "properties":{"reply":{"type":"string"},
@@ -89,18 +108,29 @@ public struct ChatResponse: Codable, Equatable, Sendable {
     }
 
     public var reply: String
+    /// Modifications proposées ; absentes du schéma des échanges simples, donc vides par défaut.
+    public var actions: [PlanAction]
     public var profilePatch: ProfilePatch
     /// `none` / `pain` / `medical`
     public var safety: String
 
     enum CodingKeys: String, CodingKey {
-        case reply, profilePatch = "profile_patch", safety
+        case reply, actions, profilePatch = "profile_patch", safety
     }
 
-    public init(reply: String, profilePatch: ProfilePatch = .init(), safety: String = "none") {
+    public init(reply: String, actions: [PlanAction] = [], profilePatch: ProfilePatch = .init(), safety: String = "none") {
         self.reply = reply
+        self.actions = actions
         self.profilePatch = profilePatch
         self.safety = safety
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        reply = try c.decode(String.self, forKey: .reply)
+        actions = try c.decodeIfPresent([PlanAction].self, forKey: .actions) ?? []
+        profilePatch = try c.decodeIfPresent(ProfilePatch.self, forKey: .profilePatch) ?? .init()
+        safety = try c.decodeIfPresent(String.self, forKey: .safety) ?? "none"
     }
 }
 

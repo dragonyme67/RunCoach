@@ -12,18 +12,24 @@ public enum CoachEngine {
         public var notice: String?
     }
 
-    /// shortcut: la course elle-même n'est pas ajoutée à la semaine de course par l'IA ; à faire avec la régénération hebdomadaire (4.7).
-    public static func generateWeek(llm: LLMClient?, snapshot: AthleteSnapshot, brief: WeekBrief, recentPlan: String) async -> WeekResult {
+    /// Semaine de course : la course elle-même est posée par le code le `raceDay`, jamais par l'IA.
+    public static func generateWeek(llm: LLMClient?, snapshot: AthleteSnapshot, brief: WeekBrief, recentPlan: String,
+                                    raceDay: String? = nil, raceDistanceKm: Double? = nil) async -> WeekResult {
         let easy = Guardrails.easyPaceSPerKm(snapshot)
         func fallback(_ notice: String) -> WeekResult {
-            WeekResult(workouts: FallbackPlanner.week(brief: brief, snapshot: snapshot), summary: nil, source: "fallback", notice: notice)
+            WeekResult(workouts: FallbackPlanner.week(brief: brief, snapshot: snapshot, raceDay: raceDay, raceDistanceKm: raceDistanceKm),
+                       summary: nil, source: "fallback", notice: notice)
         }
         /// Réponse décodée et normalisée, ou la liste des problèmes à faire corriger.
         func check(_ text: String) -> Result<WeekPlanResponse, Problems> {
             guard var plan = try? JSONDecoder().decode(WeekPlanResponse.self, from: Data(text.utf8)) else {
                 return .failure(Problems(lines: ["la réponse n'est pas un objet JSON conforme au schéma"]))
             }
-            plan.workouts = plan.workouts.map { normalized($0, easyPaceSPerKm: easy) }.sorted { $0.date < $1.date }
+            plan.workouts = plan.workouts.filter { $0.kind != .race }.map { normalized($0, easyPaceSPerKm: easy) }
+            if let raceDay, let km = raceDistanceKm {
+                plan.workouts.append(FallbackPlanner.race(day: raceDay, distanceKm: km, easyPaceSPerKm: easy))
+            }
+            plan.workouts.sort { $0.date < $1.date }
             let violations = Guardrails.validate(week: plan.workouts, brief: brief, snapshot: snapshot)
             return violations.isEmpty ? .success(plan) : .failure(Problems(lines: violations.map(\.description)))
         }
@@ -52,17 +58,74 @@ public enum CoachEngine {
         }
     }
 
-    /// Une réponse du chat. Valeurs hors liste ramenées à nil ou `none` : seul le code décide de ce qui touche le profil.
-    public static func chat(llm: LLMClient, todayLabel: String, snapshot: AthleteSnapshot, upcoming: String,
-                            history: [LLMMessage], message: String) async throws -> ChatResponse {
-        let text = try await llm.complete(
-            system: Prompts.chatSystem,
-            messages: [LLMMessage(role: "user", content: Prompts.chatMessage(todayLabel: todayLabel, snapshot: snapshot, upcoming: upcoming,
-                                                                             history: Array(history.suffix(12)), message: message))],
-            schemaName: "chat_response", schema: CoachSchemas.chat, tier: Prompts.chatTier(message))
-        guard var response = try? JSONDecoder().decode(ChatResponse.self, from: Data(text.utf8)),
-              !response.reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw LLMError.invalidOutput
+    public struct ChatOutcome: Sendable {
+        /// Réponse nettoyée ; `actions` validées par les garde-fous, ou vides si elles ne passent pas.
+        public var response: ChatResponse
+        /// Résumé des actions pour la carte de confirmation.
+        public var actionLines: [String]
+    }
+
+    /// Une réponse du chat (§6.6). Les actions proposées sont simulées sur une copie du plan puis validées ;
+    /// en cas de violation, une réparation, puis abandon des actions. Valeurs hors liste ramenées à nil ou `none` :
+    /// seul le code décide de ce qui touche le profil.
+    /// `planned` : séances de la semaine en cours et de la suivante ; `briefs` : leurs cahiers des charges.
+    public static func chat(llm: LLMClient, todayLabel: String, todayKey: String, snapshot: AthleteSnapshot, upcoming: String,
+                            planned: [WorkoutSpec], briefs: [WeekBrief], history: [LLMMessage], message: String) async throws -> ChatOutcome {
+        let tier = Prompts.chatTier(message)
+        let easy = Guardrails.easyPaceSPerKm(snapshot)
+        var messages = [LLMMessage(role: "user", content: Prompts.chatMessage(
+            todayLabel: todayLabel, snapshot: snapshot, upcoming: upcoming, briefs: tier == .hard ? briefs : [],
+            history: Array(history.suffix(12)), message: message))]
+
+        func ask() async throws -> (text: String, response: ChatResponse) {
+            let text = try await llm.complete(system: Prompts.chatSystem, messages: messages, schemaName: "chat_response",
+                                              schema: tier == .hard ? CoachSchemas.chatWithActions : CoachSchemas.chat, tier: tier)
+            guard var response = try? JSONDecoder().decode(ChatResponse.self, from: Data(text.utf8)),
+                  !response.reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw LLMError.invalidOutput
+            }
+            response.actions = response.actions.map { action in
+                var action = action
+                action.workout = action.workout.map { normalized($0, easyPaceSPerKm: easy) }
+                return action
+            }
+            return (text, response)
+        }
+        /// Lignes de la carte de confirmation, ou les problèmes à faire corriger.
+        func check(_ actions: [PlanAction]) -> Result<[String], Problems> {
+            let outcome = PlanActions.apply(actions, to: planned, todayKey: todayKey)
+            var problems = outcome.problems
+            let touched = Set(actions.flatMap { [$0.date] + ($0.newDate.map { [$0] } ?? []) }
+                .compactMap { DayKey.date($0).map { DayKey.key(DayKey.weekStart($0)) } })
+            for weekStart in touched.sorted() {
+                guard let brief = briefs.first(where: { $0.weekStart == weekStart }) else {
+                    problems.append("pas de plan défini pour la semaine du \(weekStart) : aucune modification possible")
+                    continue
+                }
+                let week = outcome.specs.filter { $0.date >= weekStart && $0.date < Guardrails.dayAfterWeek(weekStart) }
+                problems += Guardrails.validate(week: week, brief: brief, snapshot: snapshot).map(\.description)
+            }
+            return problems.isEmpty ? .success(outcome.lines) : .failure(Problems(lines: problems))
+        }
+
+        let first = try await ask()
+        let text = first.text
+        var response = first.response
+        var lines: [String] = []
+        if !response.actions.isEmpty {
+            switch check(response.actions) {
+            case .success(let ok):
+                lines = ok
+            case .failure(let problems):
+                messages += [LLMMessage(role: "assistant", content: text), LLMMessage(role: "user", content: Prompts.repair(problems.lines))]
+                if let second = try? await ask(), case .success(let ok) = check(second.response.actions) {
+                    response = second.response
+                    lines = ok
+                } else {
+                    response.actions = []
+                    response.reply += "\n\nJe ne peux pas faire ce changement sans dépasser tes limites de progression."
+                }
+            }
         }
         if let level = response.profilePatch.fatigueLevel, !["low", "normal", "high"].contains(level) {
             response.profilePatch.fatigueLevel = nil
@@ -70,7 +133,12 @@ public enum CoachEngine {
         if !["none", "pain", "medical"].contains(response.safety) { response.safety = "none" }
         // Douleur ou symptôme déclaré : le mode prudent s'active même si l'IA a oublié le champ.
         if response.safety != "none" { response.profilePatch.currentPain = true }
-        return response
+        // Symptôme inquiétant : aucune séance proposée (§6.5).
+        if response.safety == "medical" {
+            response.actions = []
+            lines = []
+        }
+        return ChatOutcome(response: response, actionLines: lines)
     }
 
     struct Problems: Error {

@@ -19,8 +19,7 @@ public enum FallbackPlanner {
         var free = brief.availableDays.filter { $0 != raceDay }
 
         if let raceDay, let km = raceDistanceKm, brief.allowedKinds.contains(.race) {
-            out.append(spec(raceDay, .race, "Course", "Le jour J : pars prudemment, accélère sur la fin si tout va bien.",
-                            [WorkoutBlock(steps: [WorkoutStep(intent: .run, end: .distance, value: km * 1000)])], easy))
+            out.append(race(day: raceDay, distanceKm: km, easyPaceSPerKm: easy))
             hardDays.insert(raceDay)
         }
 
@@ -99,6 +98,12 @@ public enum FallbackPlanner {
                             ]))
         }
         return out.sorted { $0.date < $1.date }
+    }
+
+    /// La course elle-même, posée par le code (jamais par l'IA).
+    public static func race(day: String, distanceKm: Double, easyPaceSPerKm: Double) -> WorkoutSpec {
+        spec(day, .race, "Course", "Le jour J : pars prudemment, accélère sur la fin si tout va bien.",
+             [WorkoutBlock(steps: [WorkoutStep(intent: .run, end: .distance, value: distanceKm * 1000)])], easyPaceSPerKm)
     }
 
     private static func previousDay(_ key: String) -> String {

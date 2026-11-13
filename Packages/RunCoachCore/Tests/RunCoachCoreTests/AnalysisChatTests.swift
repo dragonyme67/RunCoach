@@ -64,10 +64,11 @@ final class AnalysisChatTests: XCTestCase {
         let body = try JSONSerialization.data(withJSONObject: ["choices": [["message": ["content": content]]]])
         let http = FakeHTTP { _ in HTTPResponse(status: 200, body: body) }
         let llm = LLMClient(http: http, provider: .groq, apiKey: "k")
-        let response = try await CoachEngine.chat(llm: llm, todayLabel: "vendredi 13 novembre 2026", snapshot: GuardrailsTests.snapshot(),
-                                                  upcoming: "[]", history: [LLMMessage(role: "user", content: "Salut")],
-                                                  message: "Comment se passe mon renfo demain ?")
-        return (response, http)
+        let outcome = try await CoachEngine.chat(llm: llm, todayLabel: "vendredi 13 novembre 2026", todayKey: "2026-11-13",
+                                                 snapshot: GuardrailsTests.snapshot(), upcoming: "[]", planned: [], briefs: [],
+                                                 history: [LLMMessage(role: "user", content: "Salut")],
+                                                 message: "Comment se passe mon renfo demain ?")
+        return (outcome.response, http)
     }
 
     func testChatSanitizesAndForcesPainOnSafety() async throws {

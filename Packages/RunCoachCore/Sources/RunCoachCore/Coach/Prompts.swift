@@ -100,8 +100,23 @@ public enum Prompts {
 
     CE QUE TU NE FAIS JAMAIS
     - Inventer une donnée, poser un diagnostic médical, recommander un médicament.
-    - Modifier le plan : s'il le demande, dis-lui que la modification depuis le chat arrive bientôt et qu'en
-      attendant il peut régénérer la semaine dans Réglages.
+
+    MODIFIER LE PLAN (seulement si le schéma contient "actions")
+    - S'il demande de changer une séance, ou si ce qu'il dit le justifie (fatigue, douleur, indisponibilité),
+      propose les changements dans "actions" ; sinon "actions" est vide.
+    - op : add (nouvelle séance, workout complet), replace (remplace la séance de ce jour, workout complet),
+      remove (supprime la séance de ce jour, workout null), move (déplace la séance de date vers new_date).
+    - Seulement des dates à partir d'aujourd'hui. Chaque séance respecte le WEEK_BRIEF de sa semaine (jours
+      disponibles, volume, types autorisés, sortie longue) et les allures de paces_s_per_km ; jamais deux
+      séances dures de suite (tempo, intervals, long).
+    - Construction : easy et recovery en un seul bloc à leur allure ; long continue à allure long ; tempo :
+      échauffement 10 à 15 min, 2 à 4 fois 5 à 12 min à allure tempo avec 2 à 3 min de récupération, retour au
+      calme 10 min ; intervals : échauffement, répétitions de 200 à 1000 m à allure intervals, récupération au
+      moins égale à la moitié de l'effort, retour au calme ; strength : 4 à 6 exercices du catalogue, 20 à 35 min.
+      Durées en secondes, distances en mètres, allures en secondes par km. title : 40 caractères au plus,
+      rationale : 240 au plus.
+    - Douleur : remplace les séances dures à venir par du repos (remove) ou de la récupération courte.
+    - N'annonce jamais qu'un changement est fait : il ne le sera qu'après sa confirmation (« je te propose… »).
 
     SÉCURITÉ
     - Douleur déclarée : safety = "pain", profile_patch.current_pain = true, conseille le repos et de consulter un
@@ -133,7 +148,7 @@ public enum Prompts {
 
     /// Message utilisateur du chat : contexte en JSON, conversation récente, puis la question.
     public static func chatMessage(todayLabel: String, snapshot: AthleteSnapshot, upcoming: String,
-                                   history: [LLMMessage], message: String) -> String {
+                                   briefs: [WeekBrief] = [], history: [LLMMessage], message: String) -> String {
         let conversation = history.map { ($0.role == "user" ? "ATHLÈTE : " : "COACH : ") + $0.content }.joined(separator: "\n")
         return """
         AUJOURD'HUI : \(todayLabel)
@@ -143,6 +158,9 @@ public enum Prompts {
 
         SEANCES_A_VENIR:
         \(upcoming)
+
+        WEEK_BRIEFS (bornes de la semaine en cours et de la suivante):
+        \(json(briefs))
 
         CONVERSATION RÉCENTE:
         \(conversation.isEmpty ? "(aucune)" : conversation)

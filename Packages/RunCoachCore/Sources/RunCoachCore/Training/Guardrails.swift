@@ -248,6 +248,11 @@ public enum Guardrails {
         return nil
     }
 
+    /// Le lundi suivant la semaine qui commence le `weekStart` (borne exclue).
+    static func dayAfterWeek(_ weekStart: String) -> String {
+        DayKey.date(weekStart).map { DayKey.key(DayKey.addDays(7, to: $0)) } ?? weekStart
+    }
+
     static func nextDay(_ key: String) -> String {
         DayKey.date(key).map { DayKey.key(DayKey.addDays(1, to: $0)) } ?? key
     }
