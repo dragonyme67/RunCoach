@@ -52,6 +52,27 @@ public enum CoachEngine {
         }
     }
 
+    /// Une réponse du chat. Valeurs hors liste ramenées à nil ou `none` : seul le code décide de ce qui touche le profil.
+    public static func chat(llm: LLMClient, todayLabel: String, snapshot: AthleteSnapshot, upcoming: String,
+                            history: [LLMMessage], message: String) async throws -> ChatResponse {
+        let text = try await llm.complete(
+            system: Prompts.systemBase + Prompts.chat,
+            messages: [LLMMessage(role: "user", content: Prompts.chatMessage(todayLabel: todayLabel, snapshot: snapshot, upcoming: upcoming,
+                                                                             history: Array(history.suffix(12)), message: message))],
+            schemaName: "chat_response", schema: CoachSchemas.chat)
+        guard var response = try? JSONDecoder().decode(ChatResponse.self, from: Data(text.utf8)),
+              !response.reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw LLMError.invalidOutput
+        }
+        if let level = response.profilePatch.fatigueLevel, !["low", "normal", "high"].contains(level) {
+            response.profilePatch.fatigueLevel = nil
+        }
+        if !["none", "pain", "medical"].contains(response.safety) { response.safety = "none" }
+        // Douleur ou symptôme déclaré : le mode prudent s'active même si l'IA a oublié le champ.
+        if response.safety != "none" { response.profilePatch.currentPain = true }
+        return response
+    }
+
     struct Problems: Error {
         let lines: [String]
     }

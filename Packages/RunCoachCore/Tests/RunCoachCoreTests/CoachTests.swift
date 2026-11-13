@@ -20,15 +20,15 @@ final class CoachTests: XCTestCase {
 
     func testRequestShape() async throws {
         let http = FakeHTTP { _ in Self.completion("{}") }
-        let client = LLMClient(http: http, provider: .mistral, apiKey: "cle-test")
+        let client = LLMClient(http: http, provider: .groq, apiKey: "cle-test")
         let text = try await client.complete(system: "SYS", messages: [LLMMessage(role: "user", content: "Bonjour")],
                                              schemaName: "week_plan", schema: CoachSchemas.weekPlan)
         XCTAssertEqual(text, "{}")
         let request = try XCTUnwrap(http.requests.first)
-        XCTAssertEqual(request.url.absoluteString, "https://api.mistral.ai/v1/chat/completions")
+        XCTAssertEqual(request.url.absoluteString, "https://api.groq.com/openai/v1/chat/completions")
         XCTAssertEqual(request.headers["Authorization"], "Bearer cle-test")
         let body = bodyJSON(request)
-        XCTAssertEqual(body["model"] as? String, "mistral-large-latest")
+        XCTAssertEqual(body["model"] as? String, "openai/gpt-oss-120b")
         let messages = body["messages"] as? [[String: String]]
         XCTAssertEqual(messages?.map { $0["role"] ?? "" }, ["system", "user"])
         let format = body["response_format"] as? [String: Any]
@@ -47,7 +47,7 @@ final class CoachTests: XCTestCase {
             }
             return Self.completion("{\"ok\":true}")
         }
-        let client = LLMClient(http: http, provider: .mistral, apiKey: "k")
+        let client = LLMClient(http: http, provider: .groq, apiKey: "k")
         _ = try await client.complete(system: "SYS", messages: [], schemaName: "x", schema: "{}")
         _ = try await client.complete(system: "SYS", messages: [], schemaName: "x", schema: "{}")
         XCTAssertEqual(http.requests.count, 3, "le refus du schéma est mémorisé")
@@ -59,7 +59,7 @@ final class CoachTests: XCTestCase {
 
     func testErrorMapping() async {
         for (status, expected) in [(401, LLMError.unauthorized), (429, .rateLimited), (500, .http(500))] {
-            let client = LLMClient(http: FakeHTTP { _ in json(status, "{}") }, provider: .mistral, apiKey: "k")
+            let client = LLMClient(http: FakeHTTP { _ in json(status, "{}") }, provider: .groq, apiKey: "k")
             do {
                 _ = try await client.complete(system: "", messages: [], schemaName: "x", schema: "{}")
                 XCTFail("\(status) aurait dû échouer")
@@ -67,7 +67,7 @@ final class CoachTests: XCTestCase {
                 XCTAssertEqual(error as? LLMError, expected)
             }
         }
-        let empty = LLMClient(http: FakeHTTP { _ in json(200, #"{"choices":[]}"#) }, provider: .mistral, apiKey: "k")
+        let empty = LLMClient(http: FakeHTTP { _ in json(200, #"{"choices":[]}"#) }, provider: .groq, apiKey: "k")
         do {
             _ = try await empty.complete(system: "", messages: [], schemaName: "x", schema: "{}")
             XCTFail("réponse vide")
@@ -89,7 +89,7 @@ final class CoachTests: XCTestCase {
     private func engine(_ responses: [HTTPResponse]) -> (LLMClient, FakeHTTP) {
         let queue = Queue(responses)
         let http = FakeHTTP { _ in queue.next() }
-        return (LLMClient(http: http, provider: .mistral, apiKey: "k"), http)
+        return (LLMClient(http: http, provider: .groq, apiKey: "k"), http)
     }
 
     func testValidAIWeekIsKeptWithRecomputedEstimates() async {

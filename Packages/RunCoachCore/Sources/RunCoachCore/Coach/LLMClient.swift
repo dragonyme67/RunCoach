@@ -17,18 +17,30 @@ public enum LLMError: Error, Equatable, Sendable {
     }
 }
 
-/// Fournisseur au format « OpenAI chat completions » (ARCHITECTURE.md §5.4). URL et modèle modifiables dans Réglages.
+/// Fournisseur au format « OpenAI chat completions » (ARCHITECTURE.md §5.4). Modèle modifiable dans Réglages.
 public struct LLMProvider: Codable, Equatable, Sendable {
+    public var id: String
+    public var name: String
     public var baseURL: URL
     public var model: String
 
-    public init(baseURL: URL, model: String) {
+    public init(id: String, name: String, baseURL: URL, model: String) {
+        self.id = id
+        self.name = name
         self.baseURL = baseURL
         self.model = model
     }
 
-    /// Choix de l'utilisateur (2026-11-13). Format `json_schema` et alias de modèle vérifiés dans la documentation de Mistral le même jour.
-    public static let mistral = LLMProvider(baseURL: URL(string: "https://api.mistral.ai/v1")!, model: "mistral-large-latest")
+    /// Choix de l'utilisateur (2026-11-13) : Groq et Gemini, gratuits, au choix dans Réglages. Mistral écarté : clé API payante.
+    /// Groq (docs lues le 2026-11-13) : `json_schema` strict pris en charge par `openai/gpt-oss-120b`.
+    public static let groq = LLMProvider(id: "groq", name: "Groq", baseURL: URL(string: "https://api.groq.com/openai/v1")!,
+                                         model: "openai/gpt-oss-120b")
+    /// Gemini (docs lues le 2026-11-13) : point d'accès compatible OpenAI, en bêta ; `json_schema` non documenté sur ce point
+    /// d'accès (repli `json_object` automatique). `gemini-flash-latest` : Google prévient 2 semaines avant de changer le modèle.
+    public static let gemini = LLMProvider(id: "gemini", name: "Gemini",
+                                           baseURL: URL(string: "https://generativelanguage.googleapis.com/v1beta/openai")!,
+                                           model: "gemini-flash-latest")
+    public static let presets = [groq, gemini]
 }
 
 public struct LLMMessage: Codable, Equatable, Sendable {
@@ -60,7 +72,8 @@ public actor LLMClient {
         if !jsonObjectOnly {
             let response = try await send(system: system, messages: messages, format: .schema(name: schemaName, schema: schema))
             // Schéma refusé : un seul nouvel essai en `json_object`, schéma recopié dans le prompt (§5.4).
-            if response.status == 400, String(decoding: response.body, as: UTF8.self).contains("response_format") {
+            // Tout 400 compte : le texte de l'erreur varie selon le fournisseur.
+            if response.status == 400 {
                 jsonObjectOnly = true
             } else {
                 return try content(response)

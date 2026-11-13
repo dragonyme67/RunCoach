@@ -55,6 +55,55 @@ public enum CoachSchemas {
     }
 }
 
+extension CoachSchemas {
+    /// Réponse du chat (`ChatResponse`). Sans `actions` pour l'instant : le chat répond, il ne modifie pas encore le plan.
+    public static let chat = #"""
+    {"type":"object","additionalProperties":false,"required":["reply","profile_patch","safety"],
+     "properties":{"reply":{"type":"string"},
+                   "profile_patch":{"type":"object","additionalProperties":false,
+                                    "required":["current_pain","fatigue_level","injury_note"],
+                                    "properties":{"current_pain":{"type":["boolean","null"]},
+                                                  "fatigue_level":{"type":["string","null"]},
+                                                  "injury_note":{"type":["string","null"]}}},
+                   "safety":{"type":"string","enum":["none","pain","medical"]}}}
+    """#
+}
+
+/// Réponse de l'IA dans le chat.
+public struct ChatResponse: Codable, Equatable, Sendable {
+    public struct ProfilePatch: Codable, Equatable, Sendable {
+        public var currentPain: Bool?
+        /// `low` / `normal` / `high`, toute autre valeur est ignorée.
+        public var fatigueLevel: String?
+        public var injuryNote: String?
+
+        enum CodingKeys: String, CodingKey {
+            case currentPain = "current_pain", fatigueLevel = "fatigue_level", injuryNote = "injury_note"
+        }
+
+        public init(currentPain: Bool? = nil, fatigueLevel: String? = nil, injuryNote: String? = nil) {
+            self.currentPain = currentPain
+            self.fatigueLevel = fatigueLevel
+            self.injuryNote = injuryNote
+        }
+    }
+
+    public var reply: String
+    public var profilePatch: ProfilePatch
+    /// `none` / `pain` / `medical`
+    public var safety: String
+
+    enum CodingKeys: String, CodingKey {
+        case reply, profilePatch = "profile_patch", safety
+    }
+
+    public init(reply: String, profilePatch: ProfilePatch = .init(), safety: String = "none") {
+        self.reply = reply
+        self.profilePatch = profilePatch
+        self.safety = safety
+    }
+}
+
 /// Réponse de l'IA pour une semaine.
 public struct WeekPlanResponse: Codable, Equatable, Sendable {
     public var weekStart: String

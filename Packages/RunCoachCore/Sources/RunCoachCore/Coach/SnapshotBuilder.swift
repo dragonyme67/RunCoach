@@ -25,6 +25,8 @@ public enum SnapshotBuilder {
         public var goalTargetS: Double?
         /// Sorties de course à pied (pas le renfo).
         public var runs: [RunSummary]
+        /// Les sorties des 6 dernières semaines avec leur tracé, pour le bilan de forme.
+        public var detailedRuns: [AnalyzedRun] = []
         public var recovery: AthleteSnapshot.Recovery
         public var missedLast14d: Int
 
@@ -143,7 +145,14 @@ public enum SnapshotBuilder {
             today: DayKey.key(today), athlete: athlete, goal: goal, pacesSPerKm: paces, hrZonesBpm: zones,
             lastWeeks: lastWeeks(input.runs, today: today), lastRuns: Array(lastRuns),
             load: AthleteSnapshot.Load(acute: load.acute.rounded(), chronic: load.chronic.rounded(), ratio: load.ratio.map { ($0 * 100).rounded() / 100 }),
-            recovery: input.recovery, missedLast14d: input.missedLast14d)
+            recovery: input.recovery, missedLast14d: input.missedLast14d,
+            analysis: analysis(input))
+    }
+
+    public static func analysis(_ input: Input) -> FitnessAnalysis? {
+        let t = thresholdSPerKm(input)
+        return FitnessAnalyzer.analyze(input.detailedRuns, today: input.today,
+                                       easy: PaceModel.zone(.easy, thresholdSPerKm: t), tempo: PaceModel.zone(.tempo, thresholdSPerKm: t))
     }
 
     private static func round1(_ value: Double) -> Double { (value * 10).rounded() / 10 }

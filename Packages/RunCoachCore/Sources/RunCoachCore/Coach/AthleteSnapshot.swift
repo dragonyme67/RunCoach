@@ -152,14 +152,17 @@ public struct AthleteSnapshot: Codable, Equatable, Sendable {
     public var load: Load
     public var recovery: Recovery
     public var missedLast14d: Int
+    /// Bilan de forme des 6 dernières semaines (`FitnessAnalyzer`), nil sans sortie récente.
+    public var analysis: FitnessAnalysis?
 
     enum CodingKeys: String, CodingKey {
         case today, athlete, goal, pacesSPerKm = "paces_s_per_km", hrZonesBpm = "hr_zones_bpm"
-        case lastWeeks = "last_weeks", lastRuns = "last_runs", load, recovery, missedLast14d = "missed_last_14d"
+        case lastWeeks = "last_weeks", lastRuns = "last_runs", load, recovery, missedLast14d = "missed_last_14d", analysis
     }
 
     public init(today: String, athlete: Athlete, goal: Goal, pacesSPerKm: [String: [Int]], hrZonesBpm: [[Int]],
-                lastWeeks: [Week], lastRuns: [LastRun], load: Load, recovery: Recovery, missedLast14d: Int) {
+                lastWeeks: [Week], lastRuns: [LastRun], load: Load, recovery: Recovery, missedLast14d: Int,
+                analysis: FitnessAnalysis? = nil) {
         self.today = today
         self.athlete = athlete
         self.goal = goal
@@ -170,6 +173,7 @@ public struct AthleteSnapshot: Codable, Equatable, Sendable {
         self.load = load
         self.recovery = recovery
         self.missedLast14d = missedLast14d
+        self.analysis = analysis
     }
 
     public func pace(_ kind: WorkoutKind) -> PaceRange? {
