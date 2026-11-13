@@ -23,6 +23,8 @@ Si un fait d'`ARCHITECTURE.md` s'avère faux, corrige-le là-bas dans le même c
 - Unité dans le nom de chaque champ numérique : `distanceM`, `durationS`, `paceSPerKm`, `speedMps`.
 - Un type principal par fichier. Écran = `XxxView` + `XxxViewModel` (`@Observable`, `@MainActor`).
 - Tout champ venant de Garmin est optionnel. Colonnes des détails résolues par `key`, jamais par indice.
+- Données factices seulement avec l'argument `-mockData` (captures de la CI) ; sinon base persistante. Ne jamais casser une base installée : champs optionnels ou valeur par défaut, ou migration.
+- Réponses Garmin réelles : uniquement hors du dépôt (`Documents\RunCoach-garmin\`). Lire le dossier `skeleton\` (valeurs masquées), jamais `raw\` ni `tokens\`.
 - Aucune couleur, police ou espacement en dur dans une vue : `DesignSystem/Tokens.swift` et `Typography.swift`.
 - Mode de langage Swift 5, cible iOS 18.0, API d'iOS 18 au plus.
 - Toute logique de Core non triviale a un test. Les vues se vérifient par les captures de la CI.
@@ -42,7 +44,7 @@ Si un fait d'`ARCHITECTURE.md` s'avère faux, corrige-le là-bas dans le même c
 |---|---|---|
 | 0 | Architecture (`ARCHITECTURE.md`) | fait le 2026-11-12 |
 | 1 | Squelette, design system, données factices, CI, première installation | fait ; testé sur l'iPhone et accepté par l'utilisateur le 2026-11-13 (orange, onglet Activités, renfo, replay à plat). Sa demande restante, le replay vivant, est l'étape 3. |
-| 2 | Connexion Garmin et import. **Commencer par la validation 2.0 sur le PC.** | à faire |
+| 2 | Connexion Garmin et import. Validation 2.0 réussie le 2026-11-13 (séance de test reçue sur la montre). | codée ; en attente du test sur l'iPhone |
 | 3 | Replay vivant : vue inclinée, entrée en zoom, effets. **Commencer par le prototype 3.0 et le faire valider.** | à faire |
 | 4 | Coach IA, génération et adaptation du plan, chat | à faire |
 | 5 | Envoi des séances sur la montre | à faire |

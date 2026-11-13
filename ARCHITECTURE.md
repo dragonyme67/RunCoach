@@ -73,7 +73,8 @@ Détails techniques complets en §5.1.
 - **Peut casser sans préavis.** Garmin a cassé toutes les librairies non officielles en mars 2026 (protection Cloudflare, changement du SSO) ; elles sont restées en panne partielle jusqu'à octobre 2026.
 - **Blocages 427/429.** Des tentatives de connexion répétées font bloquer l'IP ou le client pendant 48 h et plus. Règle absolue : jamais de boucle de reconnexion (voir §5.1.6).
 - **Jeton de rafraîchissement d'environ 30 jours.** Si l'app n'est pas ouverte pendant un mois, il faut se reconnecter.
-- **Connexion WKWebView non prouvée.** Aucune source ne documente cette capture de ticket dans un WKWebView tiers. C'est une inférence solide (l'User-Agent utilisé par la librairie pour imiter l'app iOS est celui d'un WKWebView), à valider en premier à l'étape 2.
+- **Connexion WKWebView non prouvée.** Aucune source ne documente cette capture de ticket dans un WKWebView tiers. C'est une inférence solide (l'User-Agent utilisé par la librairie pour imiter l'app iOS est celui d'un WKWebView), à valider sur l'iPhone avec le premier IPA de l'étape 2.
+- **Validation 2.0 réussie le 2026-11-13** (script Python sur le PC, `python-garminconnect` 0.3.20, méthode de connexion « mobile iOS » seule) : connexion, lecture des activités, détails, sommeil, statut d'entraînement, puis création, planification et suppression d'un workout au format §5.3.3 ; **la séance est arrivée sur la Forerunner 745** avec ses étapes. Jeton accepté : `GARMIN_CONNECT_MOBILE_ANDROID_DI_2025Q2`. Le script et les réponses brutes sont hors du dépôt (`Documents\RunCoach-garmin\`).
 - **La montre reçoit la séance à sa prochaine synchro** avec Garmin Connect Mobile, pas instantanément.
 
 ### 1.4 Plans B
@@ -123,13 +124,13 @@ Il n'y a pas de backend. Si un jour il en faut un (clé partagée, cron serveur)
 ### 2.2 Flux de données
 
 **F1 — Synchro Garmin (import).** Déclencheurs : ouverture de l'app (si la dernière synchro date de plus de 15 min), tirer-pour-rafraîchir, tâche d'arrière-plan `BGAppRefreshTask`.
-1. `SyncEngine.run()` vérifie `SyncState.nextAllowedGarminCallAt` (backoff).
+1. `SyncEngine.sync(background:)` vérifie `SyncState.nextAllowedGarminCallAt` (backoff) et le budget de requêtes (`SyncPolicy`).
 2. `GarminAuth.validToken()` rafraîchit le jeton si besoin.
-3. Liste des activités, de la plus récente vers la plus ancienne, jusqu'à rencontrer un `garminActivityId` déjà en base.
-4. Pour chaque nouvelle activité de course : détails (échantillons), splits, temps par zone FC. Enregistrement d'un `Run` complet.
-5. Métriques quotidiennes des 7 derniers jours (sommeil, HRV, VO2max, statut d'entraînement).
-6. `WorkoutMatcher` rattache chaque nouveau `Run` au `PlannedWorkout` du même jour.
-7. Si une séance planifiée a été réalisée ou manquée, `CoachEngine.onNewData()` décide s'il faut adapter le plan (F2).
+3. Liste des activités (pages de 100), de la plus récente vers la plus ancienne : jusqu'au bout de l'historique tant que le premier import n'est pas fini, ensuite jusqu'à la première page qui contient un `garminActivityId` déjà en base. Chaque activité, de tout type, devient un `Run` : la liste contient déjà les stats, les zones FC (`hrTimeInZone_1…5`), la charge et le Training Effect.
+4. Pour chaque activité avec tracé (`hasPolyline`) : une requête de détails → `Track`, puis kilomètres (`Track.kmSplits()`). Les tours Garmin (`/splits`) ne servent pas : ils suivent les étapes d'une séance, pas les kilomètres.
+5. Métriques quotidiennes : statut d'entraînement et VO2max (une requête), sommeil et FC de repos des jours absents sur 28 jours, plus aujourd'hui et hier.
+6. (Étape 4) `WorkoutMatcher` rattache chaque nouveau `Run` au `PlannedWorkout` du même jour.
+7. (Étape 4) Si une séance planifiée a été réalisée ou manquée, `CoachEngine.onNewData()` décide s'il faut adapter le plan (F2).
 
 **F2 — Génération et adaptation du plan.** Déclencheurs : fin de l'onboarding, dimanche soir (semaine suivante), séance manquée, fatigue ou douleur déclarée, demande dans le chat.
 1. `MacroPlanner` (code) calcule ou met à jour le squelette : phase, volume cible, sortie longue, nombre de séances par semaine jusqu'à la course.
@@ -185,7 +186,7 @@ RunCoach/
 │  │  └─ Support/       TokenStore.swift (protocole), HTTPClient.swift (protocole), DateUtils.swift,
 │  │                    Formatters.swift (allure, durée, distance)
 │  └─ Tests/RunCoachCoreTests/
-│     ├─ Fixtures/      JSON synthétiques (réponses Garmin, réponses IA)
+│     ├─ (fixtures)     JSON synthétiques écrits dans les tests eux-mêmes (pas de dossier de ressources à gérer sous Linux)
 │     └─ *Tests.swift   un fichier de tests par fichier source non trivial
 ├─ App/
 │  ├─ RunCoachApp.swift            ← @main, ModelContainer, injection, tâche d'arrière-plan
@@ -235,7 +236,7 @@ RunCoach/
 - Un type principal par fichier, fichier nommé comme le type.
 - Vues : suffixe `View`. Un écran = `XxxView` + `XxxViewModel` (`@Observable`, `@MainActor`). Les sous-vues simples restent dans le fichier de l'écran tant qu'il fait moins de 300 lignes.
 - Entités SwiftData : nom au singulier sans suffixe (`Run`, `Split`). DTO de décodage réseau : suffixe `DTO`, dans `Core/Garmin/GarminDTO.swift`.
-- Services : `actor` quand ils portent un état partagé (`GarminAuth`, `SyncEngine`), `struct` sans état sinon (`Guardrails`, `MacroPlanner`).
+- Services : `actor` quand ils portent un état partagé (`GarminAuth`, `GarminAPI`), `struct` sans état sinon (`Guardrails`, `MacroPlanner`). `SyncEngine` est une classe `@MainActor @Observable` qui écrit dans le contexte principal de SwiftData : les écrans suivent son état, et un seul contexte évite de passer des entités d'un acteur à l'autre. Le réseau, lui, s'attend hors du fil principal (acteurs Core).
 - Unités dans les noms de champs : `distanceM`, `durationS`, `paceSPerKm`, `speedMps`, `elevationGainM`. Jamais de nombre sans unité dans son nom.
 - Dates : `Date` en UTC en base ; un « jour » de plan est une chaîne `yyyy-MM-dd` dans le fuseau local (`DayKey`).
 - Tout champ venant de Garmin est décodé en optionnel. Un champ absent ne doit jamais faire échouer l'import d'une activité.
@@ -387,11 +388,12 @@ public struct Track: Codable, Sendable {
 ### 4.3 Stratégie de synchro et de cache
 - **SwiftData est la source de vérité de l'affichage.** Aucun écran n'attend le réseau pour s'afficher.
 - **Runs** : importés une fois, immuables ensuite. Idempotence par `garminActivityId`. Une activité dont les détails ont échoué reste en `summaryOnly` et est retentée à la synchro suivante (trois tentatives au plus, puis `failed`).
-- **Premier import (backfill)** : 90 derniers jours, 100 activités au plus, par lots de 10 avec 1 s entre deux requêtes. Reprise possible : `backfillDone` ne passe à vrai qu'à la fin.
-- **Synchro incrémentale** : 40 requêtes au plus par passage.
+- **Premier import** (demande de l'utilisateur, 2026-11-13 : « récupérer toutes les données ») : tout l'historique, sans plafond de requêtes, app ouverte, une requête par seconde (environ une par sortie GPS). Chaque activité est enregistrée dès qu'elle est lue : si l'app passe en arrière-plan, l'import reprend à la synchro suivante. `backfillDone` ne passe à vrai que quand la liste est complète et qu'aucun détail ne manque.
+- **Synchro régulière** : ce qui manque seulement, 40 requêtes au plus au premier plan, 20 en arrière-plan.
+- **Détails en échec** : `Run.detailAttempts` compte les échecs ; à 3, `detailState = failed`.
 - **Plan** : local. Le calendrier Garmin n'est qu'un miroir en écriture des 7 prochains jours. L'app ne relit jamais le calendrier Garmin.
 - **Rattachement réalisé/prévu** (`WorkoutMatcher`) : un `Run` est rattaché au `PlannedWorkout` de type course du même `dayKey` encore `planned`. À la fin d'un jour local, une séance toujours `planned` passe à `missed`.
-- **Mode factice** : `ModelContainer` en mémoire rempli par `MockData.seed()`. À l'étape 1 c'est le seul mode (`AppEnvironment.makeContainer`). À l'étape 2, la base devient persistante et le mode factice passe derrière l'argument de lancement `-mockData`, que `ScreenshotTests` devra alors ajouter.
+- **Mode factice** : avec l'argument de lancement `-mockData` (ajouté par `ScreenshotTests`), `ModelContainer` en mémoire rempli par `MockData.seed()`. Sans lui, base persistante sur l'iPhone (depuis l'étape 2).
 - **Captures d'écran** : l'argument `-screen <nom>` affiche directement un écran (`DebugScreen` dans `RootView.swift`), `-scheme light|dark` force l'apparence. Tout nouvel écran s'ajoute à `DebugScreen` et à la liste de `ScreenshotTests`.
 
 ---
@@ -414,22 +416,18 @@ tokenURL   = https://diauth.garmin.com/di-oauth2-service/oauth/token
 apiBase    = https://connectapi.garmin.com
 grantTypeTicket = https://connectapi.garmin.com/di-oauth2-service/oauth/grant/service_ticket
 
-diClientIds (essayés dans l'ordre) =
-   GARMIN_CONNECT_MOBILE_IOS_DI
+diClientIds (essayés dans l'ordre ; le premier a été accepté à la validation 2.0) =
    GARMIN_CONNECT_MOBILE_ANDROID_DI_2025Q2
    GARMIN_CONNECT_MOBILE_ANDROID_DI_2024Q4
    GARMIN_CONNECT_MOBILE_ANDROID_DI
+   GARMIN_CONNECT_MOBILE_IOS_DI
 ```
-Deux jeux d'en-têtes pour les appels `diauth` et `connectapi`, sélectionnés par une seule constante `GarminIdentity.current` :
-
-- **`ios`** (par défaut : cohérent avec la pile réseau d'un iPhone) **[À VÉRIFIER étape 2]**
-  `User-Agent: GCM-iOS-5.22.1.4` · `NK: NT` · `Accept: application/json` · `Accept-Language: fr-FR,fr;q=0.9,en;q=0.8`
-- **`android`** (repli : jeu exact de la librairie, réputé fonctionnel)
+Un seul jeu d'en-têtes pour les appels `diauth` et `connectapi` (`GarminIdentity.headers`), celui de la librairie, seul validé en réel (2.0). Le jeu « iOS » envisagé au départ (`GCM-iOS-5.22.1.4`) n'a jamais été testé et a été retiré.
   `User-Agent: GCM-Android-5.23`
   `X-Garmin-User-Agent: com.garmin.android.apps.connectmobile/5.23; ; Google/sdk_gphone64_arm64/google; Android/33; Dalvik/2.1.0`
   `X-Garmin-Paired-App-Version: 10861` · `X-Garmin-Client-Platform: Android` · `X-App-Ver: 10861` · `X-Lang: en` · `X-GCExperience: GC5` · `Accept: application/json` · `Accept-Language: en-US,en;q=0.9`
 
-Avec le jeu `android`, l'ordre de `diClientIds` commence par les identifiants Android.
+Constat de la validation 2.0 : la librairie appelle `connectapi` avec la pile TLS ordinaire de Python et ces en-têtes Android, et Garmin accepte. L'empreinte TLS ne compte donc pas pour l'API, seulement (peut-être) pour la connexion SSO, qui se fait ici dans le vrai navigateur de l'iPhone.
 
 #### 5.1.2 Connexion dans l'app (méthode principale : WKWebView)
 `GarminLoginView` affiche `signInURL` dans un `WKWebView` (`WKWebsiteDataStore.nonPersistent()`, User-Agent par défaut du WKWebView, ne pas le modifier). L'utilisateur saisit ses identifiants et son éventuel code MFA dans la page de Garmin.
@@ -500,7 +498,7 @@ grant_type=refresh_token&client_id=<di_client_id>&refresh_token=<di_refresh_toke
 
 #### 5.1.6 Règles anti-blocage (à respecter à la lettre)
 1. Une tentative de connexion = une action explicite de l'utilisateur. Jamais de connexion en arrière-plan ni en boucle.
-2. Requêtes strictement séquentielles, 500 ms au moins entre deux requêtes, 40 requêtes au plus par synchro.
+2. Requêtes strictement séquentielles, 1 s au moins entre deux requêtes (`GarminAPI`). 40 requêtes au plus par synchro régulière, 20 en arrière-plan ; le premier import n'a pas de plafond (§4.3, demande de l'utilisateur) mais garde le rythme d'une requête par seconde et s'arrête au premier 427/429/403. La librairie Python, elle, enchaîne cinq méthodes de connexion après un refus : l'app n'en a qu'une.
 3. HTTP 427 ou 429 (tous hôtes) : arrêt immédiat de la synchro ; `nextAllowedGarminCallAt = now + min(15 min × 2^consecutiveFailures, 24 h)`.
 4. HTTP 403 sur `connectapi` : considéré comme un blocage du client ou du réseau, pas comme un jeton invalide. Arrêt, backoff d'une heure, pas de rafraîchissement.
 5. Une synchro réussie remet `consecutiveFailures` à zéro.
@@ -531,14 +529,18 @@ Chemins relatifs à `https://connectapi.garmin.com`.
 | Déplanifier | `DELETE /workout-service/schedule/{scheduleId}` |
 | Lister ses workouts (nettoyage) | `GET /workout-service/workouts?start=0&limit=100&myWorkoutsOnly=true` |
 
-Le temps de récupération n'a pas d'endpoint connu : non importé. La Forerunner 745 ne fournit pas forcément HRV ni disponibilité à l'entraînement : ces champs restent vides sans erreur.
+**Utilisés à l'étape 2** : profil, liste des activités (pages de `limit=100` ; la librairie accepte jusqu'à 1 000), détails, sommeil, statut d'entraînement. **Inutiles** : résumé d'une activité, splits, temps par zone, météo (la liste suffit, voir F1) ; VO2max (contenu dans le statut d'entraînement) ; HRV et disponibilité à l'entraînement (réponses vides `{}` et `[]` avec la Forerunner 745, constat du 2026-11-13). Zones FC du profil : lues à l'étape 4 si le coach en a besoin.
 
-**Noms de champs JSON [À VÉRIFIER étape 2 sur des réponses réelles].** Les noms ci-dessous viennent de la mémoire du format Garmin, pas d'une lecture du code. Tout décoder en optionnel.
-- Élément de la liste d'activités : `activityId`, `activityName`, `startTimeGMT`, `startTimeLocal`, `activityType.typeKey`, `distance` (m), `duration` (s), `movingDuration`, `averageSpeed` (m/s), `maxSpeed`, `averageHR`, `maxHR`, `averageRunningCadenceInStepsPerMinute`, `elevationGain`, `elevationLoss`, `calories`, `vO2MaxValue`, `aerobicTrainingEffect`, `anaerobicTrainingEffect`, `activityTrainingLoad`, `minTemperature`, `maxTemperature`, `locationName`, `startLatitude`, `startLongitude`, `hasPolyline`.
-- Détails : `metricDescriptors[]` (`metricsIndex`, `key`) décrit les colonnes ; `activityDetailMetrics[].metrics[]` contient les valeurs. Clés attendues : `sumElapsedDuration` ou `sumDuration` (s), `sumDistance` (m), `directLatitude`, `directLongitude`, `directElevation` (m), `directHeartRate`, `directDoubleCadence` ou `directRunCadence`, `directSpeed` (m/s), `directTimestamp` (ms). **Toujours résoudre la colonne par sa `key`, jamais par un indice fixe.**
-- Réponse de création de workout : identifiant dans `workoutId`. Réponse de planification : identifiant attendu dans `workoutScheduleId`.
+Le temps de récupération n'a pas d'endpoint connu : non importé.
 
-Types d'activité importés comme sorties : `running`, `street_running`, `track_running`, `trail_running`, `treadmill_running`, `indoor_running`, `virtual_run`. `shortcut` : les autres sports sont ignorés ; à étendre si l'utilisateur veut voir son renfo réalisé.
+**Noms de champs JSON relevés sur le compte de l'utilisateur le 2026-11-13** (structure seulement, valeurs masquées). Tout est décodé en optionnel (`GarminDTO.swift`).
+- Élément de la liste d'activités : `activityId`, `activityName`, `startTimeGMT` et `startTimeLocal` (`yyyy-MM-dd HH:mm:ss`), `beginTimestamp` (ms), `activityType.typeKey`, `distance` (m), `duration`, `elapsedDuration`, `movingDuration` (s), `averageSpeed`, `maxSpeed` (m/s), `averageHR`, `maxHR`, `averageRunningCadenceInStepsPerMinute` (pas/min, deux pieds), `elevationGain`, `elevationLoss`, `calories`, `aerobicTrainingEffect`, `anaerobicTrainingEffect`, `activityTrainingLoad`, `minTemperature`, `maxTemperature`, `locationName`, `hasPolyline`, `hrTimeInZone_1` à `hrTimeInZone_5` (s). `vO2MaxValue` n'apparaissait pas sur les sorties lues ; gardé en optionnel.
+- Détails : `metricDescriptors[]` (`metricsIndex`, `key`, `unit.factor`) décrit les colonnes ; `activityDetailMetrics[].metrics[]` contient les valeurs. **Les valeurs sont déjà dans l'unité annoncée** : `factor` (100 pour les mètres, 1 000 pour les secondes) ne s'applique pas ; vérifié en comparant le dernier `sumDistance` à la distance du résumé (rapport 1,0). Clés vues : `sumElapsedDuration`, `sumMovingDuration`, `sumDuration` (s), `sumDistance` (m), `directLatitude`, `directLongitude`, `directElevation` (m), `directHeartRate`, `directRunCadence` (un pied), `directDoubleCadence` (deux pieds, l'unité de l'app), `directFractionalCadence`, `directSpeed` (m/s), `directVerticalSpeed`, `directAirTemperature`, `directTimestamp` (ms). Environ 1 900 lignes pour 2 000 demandées. **Toujours résoudre la colonne par sa `key`, jamais par un indice fixe.**
+- Sommeil : `dailySleepDTO.sleepTimeSeconds`, `dailySleepDTO.sleepScores.overall.value`, `restingHeartRate` (racine).
+- Statut d'entraînement : `mostRecentVO2Max.generic.vo2MaxPreciseValue`, `mostRecentTrainingStatus.latestTrainingStatusData.<idMontre>.trainingStatusFeedbackPhrase` (ex. `RECOVERY_AER_LOW_SHORT`) et `primaryTrainingDevice`.
+- Réponse de création de workout : identifiant dans `workoutId`. Réponse de planification : identifiant dans `workoutScheduleId` (confirmé).
+
+Toutes les activités sont importées, de tout type (`running`, `hiking`, `strength_training`…). Les séries réelles d'un renfo (`/activity-service/activity/{id}/exerciseSets`) ne sont pas importées : aucun renfo n'existait sur le compte pour vérifier la réponse. `shortcut` : à ajouter dès qu'un renfo Garmin existe, en relançant le script 2.0.
 
 ### 5.3 Format des séances
 
@@ -782,7 +784,7 @@ Délai d'expiration : 60 s. Pas de streaming (`shortcut` : la réponse du chat a
 | IA JSON invalide ou garde-fou violé | Un appel de réparation, puis `FallbackPlanner` | Rien si la réparation réussit ; sinon étiquette « sans IA » sur les séances |
 | Clé IA absente | Plan par `FallbackPlanner`, chat désactivé | Carte « Ajoute une clé IA gratuite » |
 
-Types d'erreur : `GarminError` (`needsLogin`, `rateLimited(until:)`, `blocked`, `network`, `decoding`, `http(Int)`) et `LLMError` (`missingKey`, `unauthorized`, `rateLimited`, `invalidOutput`, `network`, `http(Int)`).
+Types d'erreur : `GarminError` (`needsLogin`, `rateLimited`, `blocked`, `network`, `decoding`, `http(Int)` ; l'heure du prochain essai est calculée par `SyncPolicy.nextAllowedCall` et rangée dans `SyncState`) et `LLMError` (`missingKey`, `unauthorized`, `rateLimited`, `invalidOutput`, `network`, `http(Int)`).
 
 ---
 
@@ -1187,6 +1189,7 @@ Règles communes à toutes les étapes :
 | Fichiers | `Core/Garmin/*`, `Core/Support/*`, `App/Services/*`, `App/Features/GarminLogin/*`, `App/Features/Settings/GarminSettingsView.swift`, `App/Data/Stores/RunStore.swift`. |
 | Validation | Tests Core : décodage des fixtures, colonnes résolues par clé, rafraîchissement concurrent = un seul appel, backoff. Sur l'iPhone : connexion réussie, sorties des 90 derniers jours importées avec tracé et splits, nouvelle sortie visible après ouverture de l'app, session conservée après redémarrage. |
 | Risques | Capture du ticket dans le WKWebView (repli §5.1.2 bis) ; jeu d'en-têtes `ios` refusé (repli `android`) ; noms de champs JSON différents de ceux du §5.2 ; blocage 429 pendant les essais (respecter §5.1.6) ; MFA. |
+| État (2026-11-13) | 2.0 réussie (§1.3). 2.1 à 2.5 codées : Core (`GarminAuth`, `GarminAPI`, `GarminDTO`, `ImportedActivity`, `ImportedDailyMetric`, `Track(details:)`, `Track.kmSplits()`, `SyncPolicy`, 29 tests verts sous Linux) ; app (`KeychainTokenStore`, `URLSessionHTTPClient`, `SyncEngine`, `BackgroundSync`, `GarminLoginView`, section Garmin et Diagnostic dans `SettingsView`, onboarding enregistré, états vides). Écarts : pas de `GarminSettingsView` ni de `RunStore` séparés (la section tient dans `SettingsView`, les requêtes dans `SyncEngine`). En attente : connexion et import vérifiés sur l'iPhone. |
 
 ### Étape 3 — Replay vivant
 > Réécrite le 2026-11-13 à la demande de l'utilisateur : « rendre vivant le suivi du trajet, avec un zoom au début pour rejoindre le point, une vue pas perpendiculaire au sol », et toute idée qui rend le replay nettement meilleur. C'est la fonction qu'il regarde le plus : la soigner passe avant les mini-cartes.
