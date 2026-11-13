@@ -47,40 +47,57 @@ final class CoachService {
     func setKey(_ key: String) {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         keyStore.write(keyName, trimmed.isEmpty ? nil : trimmed)
+        clients[providerId] = nil
         refreshHasKey()
     }
 
-    /// Préréglage du fournisseur choisi, avec le modèle éventuellement changé dans Réglages.
     var provider: LLMProvider {
-        var preset = LLMProvider.presets.first { $0.id == providerId } ?? .groq
-        if let model = UserDefaults.standard.string(forKey: "ai.model." + providerId), !model.isEmpty { preset.model = model }
-        return preset
+        LLMProvider.presets.first { $0.id == providerId } ?? .groq
     }
 
-    func setModel(_ model: String) {
-        let trimmed = model.trimmingCharacters(in: .whitespaces)
-        UserDefaults.standard.set(trimmed.isEmpty ? nil : trimmed, forKey: "ai.model." + providerId)
-    }
+    /// Journal des appels à l'IA depuis l'ouverture de l'app (Réglages → Coach IA → Diagnostic) :
+    /// modèle, code HTTP, durée, message d'erreur du fournisseur. Jamais le contenu envoyé.
+    private(set) var diagnostics: [String] = []
+    /// Un client par fournisseur et par clé : il retient les modèles épuisés pendant la session.
+    /// (Le service vit autant que l'app : la référence circulaire via le journal est sans conséquence.)
+    @ObservationIgnored private var clients: [String: (key: String, client: LLMClient)] = [:]
 
     private func client() -> LLMClient? {
         guard let key = keyStore.read(keyName), !key.isEmpty else { return nil }
-        return LLMClient(http: URLSessionHTTPClient(timeoutS: 60), provider: provider, apiKey: key)
+        if let cached = clients[providerId], cached.key == key { return cached.client }
+        let name = provider.name
+        let client = LLMClient(http: URLSessionHTTPClient(timeoutS: 60), provider: provider, apiKey: key) { line in
+            let stamp = Date().formatted(date: .omitted, time: .standard)
+            Task { @MainActor in self.addDiagnostic("\(stamp) · \(name) · \(line)") }
+        }
+        clients[providerId] = (key, client)
+        return client
     }
 
-    /// Un appel minuscule, sans aucune donnée personnelle : la clé et le modèle répondent-ils ?
-    func testKey() async -> String {
-        guard let llm = client() else { return LLMError.missingKey.userMessage }
+    private func addDiagnostic(_ line: String) {
+        diagnostics.append(line)
+        if diagnostics.count > 100 { diagnostics.removeFirst(diagnostics.count - 100) }
+    }
+
+    /// Un appel minuscule à chaque modèle, sans aucune donnée personnelle : lesquels répondent avec cette clé ?
+    func testModels() async -> [String] {
+        guard let llm = client() else { return [LLMError.missingKey.userMessage] }
         let schema = #"{"type":"object","additionalProperties":false,"required":["ok"],"properties":{"ok":{"type":"boolean"}}}"#
-        do {
-            _ = try await llm.complete(system: "Tu réponds uniquement par un objet JSON.",
-                                       messages: [LLMMessage(role: "user", content: #"Réponds {"ok": true}."#)],
-                                       schemaName: "ping", schema: schema)
-            return "Clé valide : le coach répond."
-        } catch let error as LLMError {
-            return error.userMessage
-        } catch {
-            return LLMError.network.userMessage
+        var lines: [String] = []
+        for model in provider.models {
+            do {
+                _ = try await llm.complete(system: "Tu réponds uniquement par un objet JSON.",
+                                           messages: [LLMMessage(role: "user", content: #"Réponds {"ok": true}."#)],
+                                           schemaName: "ping", schema: schema, models: [model])
+                lines.append("\(model) : répond")
+            } catch let error as LLMError {
+                lines.append("\(model) : " + (error == .rateLimited ? "quota atteint" : error.userMessage))
+                if error == .unauthorized { break }
+            } catch {
+                lines.append("\(model) : " + LLMError.network.userMessage)
+            }
         }
+        return lines
     }
 
     // MARK: - Génération

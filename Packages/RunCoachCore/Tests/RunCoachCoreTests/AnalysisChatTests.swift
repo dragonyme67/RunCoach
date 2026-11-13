@@ -77,7 +77,7 @@ final class AnalysisChatTests: XCTestCase {
         XCTAssertEqual(response.profilePatch.currentPain, true, "douleur déclarée : mode prudent")
         let body = (try JSONSerialization.jsonObject(with: http.requests[0].body!)) as! [String: Any]
         let messages = body["messages"] as! [[String: String]]
-        XCTAssertTrue(messages[0]["content"]!.contains("MODE CONVERSATION"))
+        XCTAssertTrue(messages[0]["content"]!.contains("PRIORITÉ"))
         XCTAssertTrue(messages[1]["content"]!.contains("ATHLÈTE : Salut"))
         XCTAssertTrue(messages[1]["content"]!.contains("vendredi 13 novembre 2026"))
         XCTAssertEqual(((body["response_format"] as! [String: Any])["json_schema"] as! [String: Any])["name"] as? String, "chat_response")

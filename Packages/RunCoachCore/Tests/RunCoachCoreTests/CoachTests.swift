@@ -83,7 +83,7 @@ final class CoachTests: XCTestCase {
         private let lock = NSLock()
         private var items: [HTTPResponse]
         init(_ items: [HTTPResponse]) { self.items = items }
-        func next() -> HTTPResponse { lock.lock(); defer { lock.unlock() }; return items.removeFirst() }
+        func next() -> HTTPResponse { lock.lock(); defer { lock.unlock() }; return items.count > 1 ? items.removeFirst() : items[0] }
     }
 
     private func engine(_ responses: [HTTPResponse]) -> (LLMClient, FakeHTTP) {

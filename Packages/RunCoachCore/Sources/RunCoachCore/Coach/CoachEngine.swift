@@ -56,10 +56,10 @@ public enum CoachEngine {
     public static func chat(llm: LLMClient, todayLabel: String, snapshot: AthleteSnapshot, upcoming: String,
                             history: [LLMMessage], message: String) async throws -> ChatResponse {
         let text = try await llm.complete(
-            system: Prompts.systemBase + Prompts.chat,
+            system: Prompts.chatSystem,
             messages: [LLMMessage(role: "user", content: Prompts.chatMessage(todayLabel: todayLabel, snapshot: snapshot, upcoming: upcoming,
                                                                              history: Array(history.suffix(12)), message: message))],
-            schemaName: "chat_response", schema: CoachSchemas.chat)
+            schemaName: "chat_response", schema: CoachSchemas.chat, tier: Prompts.chatTier(message))
         guard var response = try? JSONDecoder().decode(ChatResponse.self, from: Data(text.utf8)),
               !response.reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw LLMError.invalidOutput
