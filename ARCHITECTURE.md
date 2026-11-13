@@ -898,7 +898,7 @@ Chaque règle a un identifiant, un test unitaire, et un message en français uti
 | G5 | Jamais deux jours durs consécutifs (durs : `tempo`, `intervals`, `long`, `race`) |
 | G6 | Au moins 1 jour sans aucune séance par semaine, 2 pour un débutant |
 | G7 | Courses uniquement les jours de `brief.available_days` ; sortie longue le `brief.long_run_day` ; une seule course par jour |
-| G8 | Durée estimée ≤ `brief.max_session_min` (la sortie longue peut aller jusqu'à 1,5 fois cette durée) |
+| G8 | Durée estimée ≤ `brief.max_session_min` ; la sortie longue n'a pas de limite de durée (décision de l'utilisateur du 2026-11-13 : « pas de restriction », sa distance reste bornée par G3) |
 | G9 | Toute cible d'allure tient dans la zone du `kind`, à 5 s/km près ; aucune allure plus rapide que la borne rapide de `intervals` |
 | G10 | Distance cumulée à allure `tempo` ou `intervals` dans une séance ≤ `max(2 km, 10 % du volume cible)` |
 | G11 | `current_pain` vrai : uniquement `recovery` de 30 min au plus, ou repos ; `fatigue_level = high` : aucune séance de qualité, volume ≤ 80 % de `target_km` |

@@ -85,10 +85,11 @@ public enum Guardrails {
         let tempo = snapshot.pace(.tempo)
         let fastest = snapshot.pace(.intervals)?.fastSPerKm
         for w in runs {
-            // G8 : durée.
+            // G8 : durée. Sortie longue exemptée (choix de l'utilisateur, 2026-11-13 : pas de limite de durée) ;
+            // sa distance reste bornée par G3.
             let minutes = durationMin(w, easyPaceSPerKm: easy)
-            let limit = Double(brief.maxSessionMin) * (w.kind == .long ? 1.5 : 1)
-            if minutes > limit + 0.5 {
+            let limit = Double(brief.maxSessionMin)
+            if w.kind != .long, minutes > limit + 0.5 {
                 add("G8", w.date, "durée estimée \(Int(minutes.rounded())) min, \(Int(limit)) min au plus")
             }
 

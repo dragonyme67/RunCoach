@@ -30,9 +30,8 @@ public enum FallbackPlanner {
         // Sortie longue, le jour prévu.
         if sessions > 0, let day = brief.longRunDay, free.contains(day), brief.allowedKinds.contains(.long),
            let zone = snapshot.pace(.long), brief.longRunKm.count == 2 {
-            let median = Double(zone.fastSPerKm + zone.slowSPerKm) / 2
             // 45 % et non 50 % (G3) : les footings arrondis à la minute inférieure font un total un peu sous le budget.
-            var km = min(brief.longRunKm[1], 0.45 * budget,Double(brief.maxSessionMin) * 1.5 * 60 / median)
+            var km = min(brief.longRunKm[1], 0.45 * budget)
             if let longest = recent.map(\.longestKm).max() { km = min(km, longest + 2) }
             km = (km * 10).rounded(.down) / 10
             if km >= 1 {

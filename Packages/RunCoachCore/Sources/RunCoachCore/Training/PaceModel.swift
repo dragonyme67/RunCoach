@@ -26,13 +26,16 @@ public struct RunSummary: Equatable, Sendable {
     public var perceivedEffort: Int?
     /// Secondes passées dans les zones FC 1 à 5, vide si inconnu.
     public var hrZoneSeconds: [Double]
+    public var avgHR: Int?
 
-    public init(date: Date, distanceM: Double, durationS: Double, perceivedEffort: Int? = nil, hrZoneSeconds: [Double] = []) {
+    public init(date: Date, distanceM: Double, durationS: Double, perceivedEffort: Int? = nil, hrZoneSeconds: [Double] = [],
+                avgHR: Int? = nil) {
         self.date = date
         self.distanceM = distanceM
         self.durationS = durationS
         self.perceivedEffort = perceivedEffort
         self.hrZoneSeconds = hrZoneSeconds
+        self.avgHR = avgHR
     }
 }
 
