@@ -1128,7 +1128,7 @@ Tout est modifiable ensuite dans Réglages → Profil ; une modification qui tou
 
 **Replay** — plein écran, information principale : le point qui avance.
 - Carte en fond sur tout l'écran : satellite **à plat** (pas de relief 3D, refusé par l'utilisateur le 2026-11-12 : il masquait le tracé) ; tracé complet en blanc translucide, partie parcourue en accent, point accent.
-- La carte **tourne avec le coureur** : le cap de la caméra suit le sens de la course (`Track.heading(at:)`), le coureur avance toujours vers le haut de l'écran. Inclinaison 45°, distance 600 m.
+- La carte **tourne avec le coureur** : le cap de la caméra suit le sens de la course (`Track.heading(at:)`), le coureur avance toujours vers le haut de l'écran. Distance 600 m. L'inclinaison de 45° demandée est ignorée par `.imagery(elevation: .flat)` : la vue est du dessus. La vue inclinée voulue par l'utilisateur est l'objet de l'étape 3 (§8).
 - Haut : bouton Fermer ; bouton jumelles = vue de rue d'Apple (Look Around) au point courant, message si Apple n'a pas d'image à cet endroit ; bascule satellite / plan.
 - Une vue « Street View » continue qui suit le coureur n'est pas faisable : Google Street View exige un SDK tiers et une clé payante, et Look Around ne fournit que des images fixes au bord des routes couvertes.
 - Bandeau flottant bas, en verre dépoli : 6 stats qui défilent (allure, FC, cadence, altitude, distance, temps), en `statNumber`.
@@ -1262,6 +1262,7 @@ La solution visée : carte inclinée en relief réaliste, et **tracé dessiné p
   - Une `Annotation` SwiftUI n'apparaît pas quand la carte est en relief 3D et inclinée (absente ou masquée par le relief, cause non établie) ; elle s'affiche correctement à plat. Le point du coureur est donc un `MapCircle` (posé au sol, placé comme le tracé).
   - En relief 3D, tout ce qui est posé au sol (tracé, point) est **masqué par les arbres et les bâtiments 3D**. Confirmé sur l'iPhone le 2026-11-12 (« de temps en temps on ne voit plus le tracé ») : le relief 3D a été retiré du replay, qui n'utilise plus que `.flat`.
 - **Navigation** : dans une `NavigationStack`, ne jamais mélanger `NavigationLink { vue }` et `NavigationLink(value:)`. Sur l'iPhone, toucher une sortie dans la liste (ouverte par un lien à vue) rouvrait la liste au lieu du détail. Tous les liens d'une pile qui a des destinations par valeur passent par une valeur ; `testOpenRunShowsItsDetail` couvre l'ouverture d'une sortie depuis l'accueil et depuis l'onglet Activités.
+- **Inclinaison** : `.imagery(elevation: .flat)` ignore `pitch` (capture de la CI vue du dessus malgré 45°). Une vue inclinée exige `.realistic` ou `.standard`, qui ramènent les arbres 3D : d'où le tracé en surimpression d'écran de l'étape 3.
 - **Look Around** : `MKLookAroundSceneRequest` ne renvoie rien loin d'une route couverte par Apple (chemins, forêts, beaucoup de petites communes). Non testé sur l'appareil à l'étape 1.
   - Si ces deux limites gênent sur l'appareil réel : passer à `MKMapView` dans un `UIViewRepresentable` (annotation classique toujours au premier plan, caméra pilotée directement).
 - Le simulateur de la CI ne rend pas fidèlement la carte 3D : le replay se valide sur l'iPhone.
