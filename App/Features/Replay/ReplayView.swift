@@ -338,12 +338,8 @@ struct ReplayView: View {
 
     private var chart: some View {
         VStack(spacing: Spacing.s) {
-            Picker("Courbe", selection: $metric) {
-                Text("Allure").tag(0)
-                Text("FC").tag(1)
-                Text("Altitude").tag(2)
-            }
-            .pickerStyle(.segmented)
+            ReplaySegments(title: "Courbe", labels: ["Allure", "FC", "Altitude"], values: [0, 1, 2], selection: $metric)
+                .equatable()
             // Courbe figée et curseur dessiné par-dessus : la courbe n'est pas recalculée à chaque image.
             ReplayChart(points: chartPoints, xMax: Double(max(1, coordinates.count - 1)))
                 .overlay {
@@ -364,13 +360,9 @@ struct ReplayView: View {
                 .tint(Color.rc.accent)
                 .accessibilityLabel("Position dans la sortie")
             HStack {
-                Picker("Vitesse", selection: $speed) {
-                    Text("×1").tag(1)
-                    Text("×2").tag(2)
-                    Text("×4").tag(4)
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 150)
+                ReplaySegments(title: "Vitesse", labels: ["×1", "×2", "×4"], values: [1, 2, 4], selection: $speed)
+                    .equatable()
+                    .frame(width: 150)
                 Spacer()
                 playButton(size: 60)
             }
@@ -497,6 +489,28 @@ struct ReplayView: View {
     private func number(_ column: [Double]?) -> String {
         guard let column = column, hudIndex < column.count else { return "–" }
         return "\(Int(column[hudIndex].rounded()))"
+    }
+}
+
+/// Sélecteur segmenté redessiné seulement quand son choix change. Pendant la lecture, l'écran est recalculé
+/// à chaque image ; un `Picker` segmenté mis à jour aussi souvent perdait les touchers (vu sur l'iPhone, reproduit par la CI).
+struct ReplaySegments: View, Equatable {
+    let title: String
+    let labels: [String]
+    let values: [Int]
+    @Binding var selection: Int
+
+    static func == (a: Self, b: Self) -> Bool {
+        a.selection == b.selection && a.labels == b.labels
+    }
+
+    var body: some View {
+        Picker(title, selection: $selection) {
+            ForEach(values.indices, id: \.self) { i in
+                Text(labels[i]).tag(values[i])
+            }
+        }
+        .pickerStyle(.segmented)
     }
 }
 

@@ -37,6 +37,9 @@ jobs:
             -derivedDataPath build/dd-sim \
             -resultBundlePath build/ui.xcresult \
             -retry-tests-on-failure -test-iterations 3
+      - name: Show test failures
+        if: failure()
+        run: xcrun xcresulttool get test-results summary --path build/ui.xcresult || true
       - name: Export screenshots
         if: always()
         run: |
