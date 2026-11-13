@@ -18,6 +18,9 @@ struct RunDetailView: View {
                     mapHeader
                 }
                 summary
+                if !run.isStrength {
+                    effortCard
+                }
                 tiles
                 if run.hrZoneSeconds.count == 5 {
                     VStack(alignment: .leading, spacing: Spacing.m) {
@@ -133,6 +136,31 @@ struct RunDetailView: View {
             ChartPoint(x: track.dist[$0] / 1000, y: transform(values[$0]))
         }
     }
+
+    /// Ressenti de 1 à 10 : il affine les allures calculées (§6.3) ; sans lui, l'effort est supposé modéré.
+    private var effortCard: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Ressenti").rcLabel()
+                Text("Sert au coach à ajuster tes allures.")
+                    .font(.caption)
+                    .foregroundStyle(Color.rc.textSecondary)
+            }
+            Spacer()
+            Picker("Ressenti", selection: Binding(get: { run.perceivedEffort ?? 0 },
+                                                  set: { run.perceivedEffort = $0 == 0 ? nil : $0 })) {
+                Text("Non noté").tag(0)
+                ForEach(1...10, id: \.self) { value in
+                    Text("\(value) · " + Self.effortNames[value - 1]).tag(value)
+                }
+            }
+            .pickerStyle(.menu)
+        }
+        .rcCard()
+    }
+
+    private static let effortNames = ["très facile", "facile", "facile", "modéré", "modéré", "soutenu", "soutenu",
+                                      "difficile", "très difficile", "maximal"]
 
     /// « km 3,42 · 21:30 · 6:12 /km · 152 bpm · 45 m » : toutes les mesures au point choisi.
     private func detail(atKm km: Double) -> String {

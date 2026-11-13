@@ -18,28 +18,58 @@ struct RootView: View {
 }
 
 /// Les 5 onglets. Réglages s'ouvre depuis l'avatar de l'écran Aujourd'hui.
+/// Glisser depuis le bord gauche d'un écran d'onglet ramène à l'onglet précédent (demande de l'utilisateur, 2026-11-13).
 struct MainTabs: View {
     @State private var selection = 0
+    /// Onglets visités, du plus ancien au plus récent.
+    @State private var history: [Int] = []
+    @State private var isGoingBack = false
 
     var body: some View {
         TabView(selection: $selection) {
-            NavigationStack { TodayView().rcDestinations() }
+            NavigationStack { TodayView().rcDestinations().backSwipe(goBack) }
                 .tabItem { Label("Aujourd'hui", systemImage: "sun.max.fill") }
                 .tag(0)
-            NavigationStack { PlanView().rcDestinations() }
+            NavigationStack { PlanView().rcDestinations().backSwipe(goBack) }
                 .tabItem { Label("Plan", systemImage: "calendar") }
                 .tag(1)
-            NavigationStack { RunListView().rcDestinations() }
+            NavigationStack { RunListView().rcDestinations().backSwipe(goBack) }
                 .tabItem { Label("Activités", systemImage: "figure.run") }
                 .tag(2)
-            NavigationStack { CoachChatView() }
+            NavigationStack { CoachChatView().backSwipe(goBack) }
                 .tabItem { Label("Coach", systemImage: "bubble.left.and.bubble.right.fill") }
                 .tag(3)
-            NavigationStack { ProgressScreen().rcDestinations() }
+            NavigationStack { ProgressScreen().rcDestinations().backSwipe(goBack) }
                 .tabItem { Label("Progrès", systemImage: "chart.line.uptrend.xyaxis") }
                 .tag(4)
         }
         .sensoryFeedback(.selection, trigger: selection)
+        .onChange(of: selection) { old, _ in
+            if isGoingBack {
+                isGoingBack = false
+            } else {
+                history.append(old)
+                if history.count > 20 { history.removeFirst() }
+            }
+        }
+    }
+
+    private func goBack() {
+        guard let previous = history.popLast() else { return }
+        // Ferme le clavier (message en cours au coach) avant de changer d'onglet.
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        isGoingBack = true
+        selection = previous
+    }
+}
+
+extension View {
+    /// Glissement depuis le bord gauche vers la droite. Posé sur l'écran racine d'un onglet seulement :
+    /// dans un écran ouvert depuis l'onglet, le retour natif d'iOS garde la main.
+    func backSwipe(_ action: @escaping () -> Void) -> some View {
+        simultaneousGesture(DragGesture(minimumDistance: 20).onEnded { value in
+            if value.startLocation.x < 30, value.translation.width > 80, abs(value.translation.height) < 60 { action() }
+        })
     }
 }
 

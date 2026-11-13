@@ -102,8 +102,15 @@ final class CoachService {
 
     // MARK: - Génération
 
-    /// Crée le plan jusqu'à la course s'il n'existe pas, puis génère la semaine qui commence lundi prochain
-    /// (aujourd'hui si on est lundi). Les séances encore prévues de cette semaine sont remplacées.
+    /// Lundi de la semaine que génère `generateNextWeek` : lundi prochain, ou aujourd'hui si on est lundi.
+    private static func nextWeekStart(_ date: Date) -> Date {
+        let monday = DayKey.weekStart(date)
+        return DayKey.calendar.isDate(date, inSameDayAs: monday) ? monday : DayKey.addDays(7, to: monday)
+    }
+
+    /// Recalcule le plan jusqu'à la course à partir du volume réellement couru (§6.3, « recalcul chaque dimanche »),
+    /// puis génère la semaine qui commence lundi prochain (aujourd'hui si on est lundi).
+    /// Les séances encore prévues de cette semaine sont remplacées.
     func generateNextWeek() async {
         guard !isGenerating else { return }
         isGenerating = true
@@ -118,37 +125,40 @@ final class CoachService {
         let input = snapshotInput(profile: profile, goal: goal, context: context, today: today)
         let snapshot = SnapshotBuilder.snapshot(input)
 
-        let monday = DayKey.weekStart(today)
-        let start = DayKey.calendar.isDate(today, inSameDayAs: monday) ? monday : DayKey.addDays(7, to: monday)
+        let start = Self.nextWeekStart(today)
         let startKey = DayKey.key(start)
         let plans = (try? context.fetch(FetchDescriptor<TrainingPlan>())) ?? []
-        var activePlan = plans.first { $0.isActive && $0.macroWeeks.contains { $0.weekStart == startKey } }
-        if activePlan == nil {
-            let days = max(2, profile.availableWeekdays.count)
-            let base = SnapshotBuilder.baseline(input, sessionsPerWeek: min(days, 3))
-            let race = goal?.kind == "race" ? goal : nil
-            let weeks = MacroPlanner.plan(MacroPlanner.Input(
-                startWeek: start, raceDate: race?.raceDate, raceDistanceKm: race?.raceDistanceM.map { $0 / 1000 },
-                v0Km: base.v0Km, l0Km: base.l0Km, availableDays: days, beginner: input.isBeginner))
+        let plan: TrainingPlan
+        if let active = plans.first(where: { $0.isActive && $0.goal?.uuid == goal?.uuid }) {
+            plan = active
+        } else {
             plans.forEach { $0.isActive = false }
-            let created = TrainingPlan(goal: goal, macroWeeks: weeks)
-            context.insert(created)
-            activePlan = created
+            plan = TrainingPlan(goal: goal)
+            context.insert(plan)
         }
-        guard let plan = activePlan, let week = plan.macroWeeks.first(where: { $0.weekStart == startKey }) else {
+        // L'allègement reste une semaine sur quatre depuis le début du plan, malgré le recalcul hebdomadaire.
+        let origin = Self.nextWeekStart(plan.createdAt)
+        let elapsed = max(0, (DayKey.calendar.dateComponents([.day], from: origin, to: start).day ?? 0) / 7)
+        let days = max(2, profile.availableWeekdays.count)
+        let base = SnapshotBuilder.baseline(input, sessionsPerWeek: min(days, 3))
+        let race = goal?.kind == "race" ? goal : nil
+        let upcoming = MacroPlanner.plan(MacroPlanner.Input(
+            startWeek: start, raceDate: race?.raceDate, raceDistanceKm: race?.raceDistanceM.map { $0 / 1000 },
+            v0Km: base.v0Km, l0Km: base.l0Km, availableDays: days, beginner: input.isBeginner, cycleOffset: elapsed))
+        // Les semaines passées restent : le chat valide encore les changements de la semaine en cours avec elles.
+        let weeks = plan.macroWeeks.filter { $0.weekStart < startKey } + upcoming
+        plan.macroWeeksData = (try? JSONEncoder().encode(weeks)) ?? plan.macroWeeksData
+        guard let week = upcoming.first(where: { $0.weekStart == startKey }),
+              let brief = brief(for: week, profile: profile, goal: goal, snapshot: snapshot, beginner: input.isBeginner) else {
             notice = "Ta course est passée : choisis un nouvel objectif dans Réglages."
             return
         }
 
         let weekKeys = (0..<7).map { DayKey.key(DayKey.addDays($0, to: start)) }
         let raceDay = goal?.raceDate.map(DayKey.key).flatMap { weekKeys.contains($0) ? $0 : nil }
-        let brief = WeekBriefBuilder.brief(WeekBriefBuilder.Input(
-            week: week, availableWeekdays: profile.availableWeekdays, longRunWeekday: profile.longRunWeekday,
-            maxSessionMin: profile.maxSessionMinutes, wantsStrength: profile.wantsStrength, beginner: input.isBeginner,
-            loadRatio: snapshot.load.ratio, lastWeekKm: snapshot.lastWeeks.last?.km ?? 0, raceDay: raceDay))
-
         let result = await CoachEngine.generateWeek(llm: client(), snapshot: snapshot, brief: brief,
-                                                    recentPlan: recentPlan(context: context, today: today))
+                                                    recentPlan: recentPlan(context: context, today: today),
+                                                    raceDay: raceDay, raceDistanceKm: race?.raceDistanceM.map { $0 / 1000 })
 
         let existing = (try? context.fetch(FetchDescriptor<PlannedWorkout>())) ?? []
         for workout in existing where weekKeys.contains(workout.dayKey) && workout.status == "planned" {
@@ -161,6 +171,58 @@ final class CoachService {
         }
         try? context.save()
         notice = result.notice ?? result.summary
+    }
+
+    /// Cahier des charges d'une semaine du plan.
+    private func brief(for week: MacroWeek, profile: AthleteProfile, goal: Goal?, snapshot: AthleteSnapshot, beginner: Bool) -> WeekBrief? {
+        guard let start = DayKey.date(week.weekStart) else { return nil }
+        let weekKeys = (0..<7).map { DayKey.key(DayKey.addDays($0, to: start)) }
+        let raceDay = goal?.raceDate.map(DayKey.key).flatMap { weekKeys.contains($0) ? $0 : nil }
+        return WeekBriefBuilder.brief(WeekBriefBuilder.Input(
+            week: week, availableWeekdays: profile.availableWeekdays, longRunWeekday: profile.longRunWeekday,
+            maxSessionMin: profile.maxSessionMinutes, wantsStrength: profile.wantsStrength, beginner: beginner,
+            loadRatio: snapshot.load.ratio, lastWeekKm: snapshot.lastWeeks.last?.km ?? 0, raceDay: raceDay))
+    }
+
+    /// Une fois par jour à l'ouverture : le samedi, le dimanche ou le lundi, si la semaine à venir n'a pas encore
+    /// de séances et qu'un plan existe déjà (le premier se lance à la main), elle est générée (4.7).
+    func autoGenerateIfNeeded() async {
+        let context = container.mainContext
+        let today = Date()
+        let weekday = DayKey.calendar.component(.weekday, from: today)   // 1 = dimanche, 2 = lundi, 7 = samedi
+        let todayKey = DayKey.key(today)
+        guard [1, 2, 7].contains(weekday), UserDefaults.standard.string(forKey: "coach.autoGenerated") != todayKey,
+              ((try? context.fetch(FetchDescriptor<TrainingPlan>())) ?? []).contains(where: { $0.isActive }) else { return }
+        let start = Self.nextWeekStart(today)
+        let weekKeys = Set((0..<7).map { DayKey.key(DayKey.addDays($0, to: start)) })
+        let workouts = (try? context.fetch(FetchDescriptor<PlannedWorkout>())) ?? []
+        guard !workouts.contains(where: { weekKeys.contains($0.dayKey) && $0.status != "cancelled" }) else { return }
+        UserDefaults.standard.set(todayKey, forKey: "coach.autoGenerated")
+        await generateNextWeek()
+    }
+
+    /// Rattache les sorties aux séances du même jour et marque manquées les séances passées non faites (§4.3).
+    func updatePlanStatus() {
+        let context = container.mainContext
+        let workouts = ((try? context.fetch(FetchDescriptor<PlannedWorkout>())) ?? []).filter { $0.status == "planned" }
+        guard !workouts.isEmpty else { return }
+        let earliest = workouts.map { $0.dayKey }.min() ?? ""
+        let runs = ((try? context.fetch(FetchDescriptor<Run>())) ?? [])
+            .filter { $0.plannedWorkout == nil && $0.dayKey >= earliest }
+        let result = WorkoutMatcher.match(
+            planned: workouts.map { WorkoutMatcher.Planned(dayKey: $0.dayKey, isRun: $0.kindValue.isRun, status: $0.status) },
+            done: runs.map { WorkoutMatcher.Done(dayKey: $0.dayKey, isRun: !$0.isStrength) },
+            todayKey: DayKey.key(Date()))
+        for pair in result.pairs {
+            runs[pair.done].plannedWorkout = workouts[pair.planned]
+            workouts[pair.planned].status = "done"
+            workouts[pair.planned].updatedAt = Date()
+        }
+        for index in result.missed {
+            workouts[index].status = "missed"
+            workouts[index].updatedAt = Date()
+        }
+        if !result.pairs.isEmpty || !result.missed.isEmpty { try? context.save() }
     }
 
     private func snapshotInput(profile: AthleteProfile, goal: Goal?, context: ModelContext, today: Date) -> SnapshotBuilder.Input {
@@ -236,13 +298,30 @@ final class CoachService {
         defer { isReplying = false }
         let goal = (try? context.fetch(FetchDescriptor<Goal>()))?.first { $0.isActive }
         let today = Date()
-        let snapshot = SnapshotBuilder.snapshot(snapshotInput(profile: profile, goal: goal, context: context, today: today))
+        let input = snapshotInput(profile: profile, goal: goal, context: context, today: today)
+        let snapshot = SnapshotBuilder.snapshot(input)
         let label = today.formatted(.dateTime.weekday(.wide).day().month(.wide).year().locale(Locale(identifier: "fr_FR")))
+        // Semaine en cours et suivante : les seules que le chat peut modifier, chacune avec ses bornes.
+        let weekStarts = [DayKey.weekStart(today), DayKey.addDays(7, to: DayKey.weekStart(today))].map(DayKey.key)
+        let macro = ((try? context.fetch(FetchDescriptor<TrainingPlan>())) ?? []).first { $0.isActive }?.macroWeeks ?? []
+        let briefs = macro.filter { weekStarts.contains($0.weekStart) }
+            .compactMap { brief(for: $0, profile: profile, goal: goal, snapshot: snapshot, beginner: input.isBeginner) }
+        let end = DayKey.key(DayKey.addDays(14, to: DayKey.weekStart(today)))
+        let planned = ((try? context.fetch(FetchDescriptor<PlannedWorkout>())) ?? [])
+            .filter { $0.dayKey >= weekStarts[0] && $0.dayKey < end && $0.status != "cancelled" }
+            .compactMap(\.spec)
         do {
-            let response = try await CoachEngine.chat(llm: llm, todayLabel: label, snapshot: snapshot,
-                                                      upcoming: upcoming(context: context, today: today),
-                                                      history: Array(history), message: message)
-            context.insert(ChatMessage(role: "assistant", text: response.reply))
+            let outcome = try await CoachEngine.chat(llm: llm, todayLabel: label, todayKey: DayKey.key(today), snapshot: snapshot,
+                                                     upcoming: upcoming(context: context, today: today), planned: planned,
+                                                     briefs: briefs, history: Array(history), message: message)
+            let response = outcome.response
+            let reply = ChatMessage(role: "assistant", text: response.reply)
+            if !response.actions.isEmpty {
+                reply.actionsData = try? JSONEncoder().encode(response.actions)
+                reply.actionLines = outcome.actionLines
+                reply.actionsState = "proposed"
+            }
+            context.insert(reply)
             let patch = response.profilePatch
             if let pain = patch.currentPain { profile.currentPain = pain }
             if let fatigue = patch.fatigueLevel { profile.fatigueLevel = fatigue }
@@ -254,6 +333,43 @@ final class CoachService {
         } catch {
             chatError = LLMError.network.userMessage
         }
+    }
+
+    /// Applique les modifications proposées dans un message, après confirmation de l'athlète (§6.6).
+    func applyActions(of message: ChatMessage) {
+        guard message.actionsState == "proposed", let data = message.actionsData,
+              let actions = try? JSONDecoder().decode([PlanAction].self, from: data) else { return }
+        let context = container.mainContext
+        let plan = ((try? context.fetch(FetchDescriptor<TrainingPlan>())) ?? []).first { $0.isActive }
+        var workouts = ((try? context.fetch(FetchDescriptor<PlannedWorkout>())) ?? []).filter { $0.status == "planned" }
+        for action in actions {
+            /// Séance encore prévue ce jour-là, du même genre (course ou renfo) si on le connaît — comme `PlanActions.apply`.
+            let target = workouts.first { $0.dayKey == action.date && (action.workout == nil || $0.kindValue.isRun == action.workout!.kind.isRun) }
+                ?? workouts.first { $0.dayKey == action.date }
+            switch action.op {
+            case .add:
+                guard var spec = action.workout else { continue }
+                spec.date = action.date
+                let workout = PlannedWorkout(spec: spec, source: "ai")
+                context.insert(workout)
+                workout.plan = plan
+                workouts.append(workout)
+            case .replace:
+                guard var spec = action.workout, let target else { continue }
+                spec.date = action.date
+                target.update(with: spec, source: "ai")
+            case .remove:
+                target?.status = "cancelled"
+                target?.updatedAt = Date()
+                workouts.removeAll { $0 === target }
+            case .move:
+                guard let newDate = action.newDate, let target, var spec = target.spec else { continue }
+                spec.date = newDate
+                target.update(with: spec, source: target.source)
+            }
+        }
+        message.actionsState = "applied"
+        try? context.save()
     }
 
     /// Séances des 14 prochains jours, détail complet, avec le nom français des exercices de renfo.

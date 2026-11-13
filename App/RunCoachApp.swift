@@ -31,7 +31,14 @@ struct RunCoachApp: App {
         .modelContainer(container)
         .onChange(of: scenePhase) { _, phase in
             switch phase {
-            case .active: Task { await sync.syncIfStale() }
+            case .active:
+                Task {
+                    await sync.syncIfStale()
+                    // Données factices des captures : on ne touche pas au plan de démonstration.
+                    guard !options.mockData else { return }
+                    coach.updatePlanStatus()
+                    await coach.autoGenerateIfNeeded()
+                }
             case .background: BackgroundSync.schedule()
             default: break
             }

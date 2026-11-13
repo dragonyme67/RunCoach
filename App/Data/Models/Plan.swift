@@ -66,6 +66,20 @@ final class PlannedWorkout {
         self.updatedAt = Date()
     }
 
+    /// Remplace le contenu par une nouvelle version (chat, §6.6) ; une séance déjà envoyée sur la montre est à remettre à jour.
+    func update(with spec: WorkoutSpec, source: String) {
+        dayKey = spec.date
+        kind = spec.kind.rawValue
+        title = spec.title
+        rationale = spec.rationale
+        specData = (try? JSONEncoder().encode(spec)) ?? specData
+        estimatedDurationMin = spec.estimatedDurationMin
+        estimatedDistanceKm = spec.estimatedDistanceKm
+        self.source = source
+        if garminWorkoutId != nil { garminSyncState = "needsUpdate" }
+        updatedAt = Date()
+    }
+
     var kindValue: WorkoutKind {
         WorkoutKind(rawValue: kind) ?? .easy
     }

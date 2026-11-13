@@ -3,12 +3,13 @@ import SwiftData
 
 /// Conversation avec le coach. Information principale : la conversation.
 /// Le coach répond à partir du bilan de forme, des séances des 14 prochains jours et de la conversation (§6.5).
-/// shortcut: le chat ne modifie pas encore le plan (actions et `ConfirmCard`, §6.6) ; à ajouter avec l'étape 4.7.
+/// Les modifications du plan qu'il propose s'appliquent seulement après « Appliquer » (`ConfirmCard`, §6.6).
 struct CoachChatView: View {
     @Query(sort: \ChatMessage.createdAt) private var messages: [ChatMessage]
     @Environment(CoachService.self) private var coach
     @State private var draft = ""
     @State private var showSettings = false
+    @FocusState private var isTyping: Bool
 
     private let suggestions = [
         "Comment se passe ma séance de demain ?",
@@ -33,7 +34,7 @@ struct CoachChatView: View {
                         ConfirmCard(
                             lines: message.actionLines,
                             state: message.actionsState,
-                            onApply: { message.actionsState = "applied" },
+                            onApply: { coach.applyActions(of: message) },
                             onIgnore: { message.actionsState = "rejected" }
                         )
                     }
@@ -55,6 +56,15 @@ struct CoachChatView: View {
             .padding(Spacing.l)
         }
         .defaultScrollAnchor(.bottom)
+        // Le clavier cachait la barre d'onglets sans pouvoir être fermé (constat sur l'iPhone).
+        .scrollDismissesKeyboard(.interactively)
+        .onTapGesture { isTyping = false }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("OK") { isTyping = false }
+            }
+        }
         .rcScreenBackground()
         .navigationTitle("Coach")
         .safeAreaInset(edge: .bottom) {
@@ -84,6 +94,7 @@ struct CoachChatView: View {
             }
             HStack(spacing: Spacing.s) {
                 TextField("Écris à ton coach…", text: $draft, axis: .vertical)
+                    .focused($isTyping)
                     .lineLimit(1...4)
                     .padding(.horizontal, Spacing.l)
                     .padding(.vertical, Spacing.m)

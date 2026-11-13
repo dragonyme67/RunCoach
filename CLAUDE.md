@@ -46,7 +46,7 @@ Si un fait d'`ARCHITECTURE.md` s'avère faux, corrige-le là-bas dans le même c
 | 1 | Squelette, design system, données factices, CI, première installation | fait ; testé sur l'iPhone et accepté par l'utilisateur le 2026-11-13 (orange, onglet Activités, renfo, replay à plat). Sa demande restante, le replay vivant, est l'étape 3. |
 | 2 | Connexion Garmin et import (tout l'historique au premier passage, puis ce qui manque). | fait ; validé sur l'iPhone par l'utilisateur le 2026-11-13 |
 | 3 | Replay vivant : vue inclinée, entrée en zoom, effets. **Commencer par le prototype 3.0 et le faire valider.** | 3.0 à 3.2 faits (plan B `MKMapView`, satellite vu du dessus par défaut) ; halo cardiaque, bornes km, bandeau réduit livrés le 2026-11-13, en attente du verdict |
-| 4 | Coach IA, génération et adaptation du plan, chat 4.1 à 4.4 et 4.6 faites ; Groq ou Gemini au choix (gratuits, choix de l'utilisateur) ; bilan de forme et chat sans actions livrés le 2026-11-13, à tester avec sa clé ; reste actions du chat et 4.7 |
+| 4 | Coach IA, génération et adaptation du plan, chat faite le 2026-11-13 (Groq ou Gemini au choix, bascule de modèle sur quota, bilan de forme, chat avec actions confirmées, 4.7) ; en attente des tests de l'utilisateur sur l'iPhone |
 | 5 | Envoi des séances sur la montre | à faire |
 | 6 | Finitions, notifications, tests. **À voir avec l'utilisateur (demande du 2026-11-13) : garder l'app disponible en permanence sans payer** (renouvellement auto Sideloadly en Wi-Fi, SideStore sur l'iPhone ; le compte Apple payant est la seule voie sans renouvellement hebdomadaire). | à faire |
 
