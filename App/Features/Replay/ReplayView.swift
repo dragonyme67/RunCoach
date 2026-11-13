@@ -4,16 +4,24 @@ import Charts
 import RunCoachCore
 
 /// Replay d'une sortie : carte qui tourne avec le coureur (il avance toujours vers le haut de l'écran).
-/// Par défaut, vue inclinée en relief ; le tracé est dessiné par-dessus la carte (`ReplayMapView`) :
-/// posé sur la carte, il disparaissait sous les arbres et bâtiments 3D.
+/// Par défaut, satellite incliné sans relief ; le tracé est dessiné par-dessus la carte (`ReplayMapView`).
+/// Entrée : vue d'ensemble du tracé, puis descente vers le départ ; la lecture démarre seule.
+/// Sortie : remontée vers la vue d'ensemble et carte de bilan (ARCHITECTURE.md §8, 3.2).
 /// Fluidité : la lecture avance à vitesse constante sur la distance (marche et arrêts ne la ralentissent pas),
 /// la position est interpolée à chaque image, et la caméra tourne en douceur vers un point situé devant.
 struct ReplayView: View {
     let run: Run
-    /// 0 = incliné en relief, 1 = satellite à plat, 2 = plan.
+    /// 0 = satellite incliné sans relief, 1 = relief 3D, 2 = plan.
     @State var style = 0
     /// Position de lecture, fraction des relevés (0 = départ).
     @State var progress: Double = 0
+    /// Temps écoulé dans la séquence d'entrée ; `nil` quand elle est finie (ou désactivée).
+    @State var intro: Double? = 0
+    /// Temps écoulé dans la séquence de sortie ; `nil` hors sortie.
+    @State private var outro: Double?
+    @State private var showSummary = false
+    @State private var overview: ReplayCamera?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Cap de la caméra, lissé (`ReplayDirector.smoothHeading`).
     @State private var cameraHeading: Double = 0
     /// Indices des points dessinés en surimpression : un tous les 12 m environ.
@@ -40,7 +48,7 @@ struct ReplayView: View {
             closeButton
         }
         .safeAreaInset(edge: .bottom) {
-            panel
+            if showSummary { summary } else { panel }
         }
         .background { clock }
         .task {
@@ -49,8 +57,11 @@ struct ReplayView: View {
             track = loaded
             coordinates = RouteMap.coordinates(loaded)
             overlayIndices = Self.overlayIndices(loaded?.dist ?? [], stepM: 12)
+            overview = loaded.map { ReplayDirector.overview(of: $0, viewAspect: 0.46) }
             chartPoints = makeChartPoints()
             cameraHeading = targetHeading
+            // « Réduire les animations » d'iOS : pas de séquence d'entrée.
+            if reduceMotion { intro = nil }
         }
         .onChange(of: progress) {
             // Barre déplacée à la main, lecture en pause : la caméra se tourne directement dans le bon sens.
@@ -71,18 +82,67 @@ struct ReplayView: View {
 
     /// Horloge de lecture, calée sur le rafraîchissement de l'écran.
     private var clock: some View {
-        TimelineView(.animation(paused: !isPlaying)) { context in
+        TimelineView(.animation(paused: !isPlaying && intro == nil && outro == nil)) { context in
             Color.clear.onChange(of: context.date) { old, new in
                 // Borné : à la reprise après une pause, l'écart entre deux dates vaut toute la pause.
-                let elapsedS = min(0.1, new.timeIntervalSince(old))
-                guard let track, let start = track.dist.first, let end = track.dist.last, end > start else { return }
-                let playS = ReplayDirector.playbackDurationS(runDurationS: track.t.last ?? run.durationS)
-                let distanceM = min(end, currentDistM + elapsedS * Double(speed) * (end - start) / playS)
-                progress = track.index(atDistanceM: distanceM) / Double(max(1, track.dist.count - 1))
-                cameraHeading = ReplayDirector.smoothHeading(cameraHeading, toward: targetHeading, dt: elapsedS)
-                if distanceM >= end { isPlaying = false }
+                tick(min(0.1, new.timeIntervalSince(old)))
             }
         }
+    }
+
+    private func tick(_ elapsedS: Double) {
+        guard let track, let start = track.dist.first, let end = track.dist.last, end > start else { return }
+        if let t = intro {
+            let next = t + elapsedS
+            if next >= ReplayDirector.introHoldS + ReplayDirector.introDescentS {
+                intro = nil
+                isPlaying = true
+            } else {
+                intro = next
+            }
+            return
+        }
+        if let t = outro {
+            let next = t + elapsedS
+            if next >= ReplayDirector.outroS {
+                outro = nil
+                showSummary = true
+            } else {
+                outro = next
+            }
+            return
+        }
+        let playS = ReplayDirector.playbackDurationS(runDurationS: track.t.last ?? run.durationS)
+        let distanceM = min(end, currentDistM + elapsedS * Double(speed) * (end - start) / playS)
+        progress = track.index(atDistanceM: distanceM) / Double(max(1, track.dist.count - 1))
+        cameraHeading = ReplayDirector.smoothHeading(cameraHeading, toward: targetHeading, dt: elapsedS)
+        if distanceM >= end {
+            isPlaying = false
+            if reduceMotion { showSummary = true } else { outro = 0 }
+        }
+    }
+
+    /// Caméra du moment : suivi du coureur, ou passage vers et depuis la vue d'ensemble.
+    private func camera(_ track: Track) -> ReplayCamera {
+        let runner = track.coordinate(atDistanceM: currentDistM)
+        let follow = ReplayCamera(centerLat: runner.lat, centerLon: runner.lon,
+                                  distanceM: style == 2 ? 600 : 500, pitchDeg: style == 2 ? 0 : 60,
+                                  headingDeg: cameraHeading)
+        guard let overview else { return follow }
+        if let t = intro {
+            return ReplayDirector.blend(overview, follow, t: (t - ReplayDirector.introHoldS) / ReplayDirector.introDescentS)
+        }
+        if let t = outro { return ReplayDirector.blend(follow, overview, t: t / ReplayDirector.outroS) }
+        return showSummary ? overview : follow
+    }
+
+    /// Revoir : repart de la vue d'ensemble, comme à l'ouverture.
+    private func replay() {
+        showSummary = false
+        progress = 0
+        cameraHeading = targetHeading
+        intro = reduceMotion ? nil : 0
+        isPlaying = reduceMotion
     }
 
     /// Cap visé : la direction d'un point situé un peu plus loin sur le tracé.
@@ -94,12 +154,16 @@ struct ReplayView: View {
     private var map: some View {
         if let track, coordinates.count > 1 {
             let pose = track.pose(at: progress)
+            // Pendant le suivi, seule la partie proche est dessinée ; vue d'ensemble : tout le tracé.
+            let following = intro == nil && outro == nil && !showSummary
             ReplayMapView(coordinates: overlayIndices.map { coordinates[$0] },
                           distances: overlayIndices.map { track.dist[$0] },
                           currentDistM: currentDistM,
                           runner: CLLocationCoordinate2D(latitude: pose.lat, longitude: pose.lon),
-                          heading: cameraHeading,
-                          style: style)
+                          camera: camera(track),
+                          style: style,
+                          behindM: following ? 600 : .infinity,
+                          aheadM: following ? 1500 : .infinity)
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
         } else {
@@ -138,10 +202,10 @@ struct ReplayView: View {
                 isPlaying = false
                 Task { await openStreet() }
             }
-            mapButton(["view.3d", "globe.europe.africa.fill", "map.fill"][style], label: "Style de carte") {
+            mapButton(["globe.europe.africa.fill", "view.3d", "map.fill"][style], label: "Style de carte") {
                 style = (style + 1) % 3
             }
-            .accessibilityValue(["Inclinée", "Satellite à plat", "Plan"][style])
+            .accessibilityValue(["Satellite incliné", "Relief 3D", "Plan"][style])
         }
         .padding(.horizontal, Spacing.l)
     }
@@ -226,9 +290,15 @@ struct ReplayView: View {
                 Spacer()
                 Button {
                     if progress >= 1 { progress = 0 }
-                    isPlaying.toggle()
+                    // Pendant l'entrée : on la saute et la lecture démarre tout de suite.
+                    if intro != nil {
+                        intro = nil
+                        isPlaying = true
+                    } else {
+                        isPlaying.toggle()
+                    }
                 } label: {
-                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                    Image(systemName: isPlaying || intro != nil ? "pause.fill" : "play.fill")
                         .font(.title2)
                         .foregroundStyle(Color.rc.onAccent)
                         .frame(width: 60, height: 60)
@@ -238,6 +308,34 @@ struct ReplayView: View {
                 .accessibilityLabel(isPlaying ? "Pause" : "Lecture")
             }
         }
+    }
+
+    /// Bilan de fin : la sortie en quatre chiffres, puis Revoir ou Fermer.
+    private var summary: some View {
+        VStack(spacing: Spacing.l) {
+            Text("Sortie terminée")
+                .font(.rcTitle)
+                .foregroundStyle(Color.white)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Spacing.s), count: 2), spacing: Spacing.m) {
+                ReplayStat(label: "Distance", value: Fmt.km(run.distanceM), unit: "km")
+                ReplayStat(label: "Durée", value: Fmt.duration(run.durationS), unit: "")
+                ReplayStat(label: "Allure", value: Fmt.pace(sPerKm: run.paceSPerKm), unit: "/km")
+                if let best = run.sortedSplits.filter({ $0.distanceM >= 990 }).map(\.paceSPerKm).min() {
+                    ReplayStat(label: "Meilleur km", value: Fmt.pace(sPerKm: best), unit: "/km")
+                }
+            }
+            HStack(spacing: Spacing.m) {
+                Button("Revoir") { replay() }
+                    .buttonStyle(.bordered)
+                    .tint(Color.white)
+                    .frame(maxWidth: .infinity)
+                PrimaryButton(title: "Fermer") { dismiss() }
+            }
+        }
+        .padding(Spacing.l)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .padding(.horizontal, Spacing.s)
+        .environment(\.colorScheme, .dark)
     }
 
     // MARK: - Données

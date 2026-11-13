@@ -1,7 +1,59 @@
 import Foundation
 
-/// Règles de la caméra et de la lecture du replay (ARCHITECTURE.md §8, étape 3.1). Pures et testées.
+/// Caméra de la carte : point visé, distance de l'œil, inclinaison (0 = vue du dessus), cap.
+public struct ReplayCamera: Equatable, Sendable {
+    public var centerLat: Double
+    public var centerLon: Double
+    public var distanceM: Double
+    public var pitchDeg: Double
+    public var headingDeg: Double
+
+    public init(centerLat: Double, centerLon: Double, distanceM: Double, pitchDeg: Double, headingDeg: Double) {
+        self.centerLat = centerLat
+        self.centerLon = centerLon
+        self.distanceM = distanceM
+        self.pitchDeg = pitchDeg
+        self.headingDeg = headingDeg
+    }
+}
+
+/// Règles de la caméra et de la lecture du replay (ARCHITECTURE.md §8, étapes 3.1 et 3.2). Pures et testées.
 public enum ReplayDirector {
+    /// Entrée : vue d'ensemble immobile, puis descente vers le coureur. Sortie : remontée.
+    public static let introHoldS = 0.8
+    public static let introDescentS = 2.5
+    public static let outroS = 2.5
+
+    /// Vue d'ensemble du tracé entier, du dessus, nord en haut. `viewAspect` = largeur / hauteur de la carte.
+    // shortcut: distance tirée d'un champ de vision supposé (≈ 30°) et d'une marge pour le bandeau du bas ;
+    // à recaler si la vue d'ensemble coupe le tracé ou le montre trop petit sur l'iPhone.
+    public static func overview(of track: Track, viewAspect: Double) -> ReplayCamera {
+        guard let minLat = track.lat.min(), let maxLat = track.lat.max(),
+              let minLon = track.lon.min(), let maxLon = track.lon.max() else {
+            return ReplayCamera(centerLat: 0, centerLon: 0, distanceM: 2000, pitchDeg: 0, headingDeg: 0)
+        }
+        let centerLat = (minLat + maxLat) / 2
+        let spanNorthM = (maxLat - minLat) * 111_320
+        let spanEastM = (maxLon - minLon) * 111_320 * cos(centerLat * .pi / 180)
+        let spanM = max(spanNorthM, spanEastM / max(0.1, viewAspect))
+        return ReplayCamera(centerLat: centerLat, centerLon: (minLon + maxLon) / 2,
+                            distanceM: max(800, spanM * 2.6), pitchDeg: 0, headingDeg: 0)
+    }
+
+    /// Passage progressif de `a` à `b` (`t` de 0 à 1, accéléré puis freiné). Zoom géométrique : la descente
+    /// paraît régulière à toutes les hauteurs. Cap par le plus court chemin.
+    public static func blend(_ a: ReplayCamera, _ b: ReplayCamera, t: Double) -> ReplayCamera {
+        let x = max(0, min(1, t))
+        let e = x * x * (3 - 2 * x)
+        let turn = (b.headingDeg - a.headingDeg + 540).truncatingRemainder(dividingBy: 360) - 180
+        return ReplayCamera(
+            centerLat: a.centerLat + (b.centerLat - a.centerLat) * e,
+            centerLon: a.centerLon + (b.centerLon - a.centerLon) * e,
+            distanceM: a.distanceM * pow(b.distanceM / a.distanceM, e),
+            pitchDeg: a.pitchDeg + (b.pitchDeg - a.pitchDeg) * e,
+            headingDeg: (a.headingDeg + turn * e + 360).truncatingRemainder(dividingBy: 360))
+    }
+
     /// Distance (m) du point visé devant le coureur : la caméra s'oriente vers lui.
     public static let lookAheadM = 80.0
 

@@ -48,7 +48,7 @@ Si un fait d'`ARCHITECTURE.md` s'avère faux, corrige-le là-bas dans le même c
 | 3 | Replay vivant : vue inclinée, entrée en zoom, effets. **Commencer par le prototype 3.0 et le faire valider.** | 3.0 livré le 2026-11-13 (avec lissage du zigzag GPS) ; en attente du verdict |
 | 4 | Coach IA, génération et adaptation du plan, chat | à faire |
 | 5 | Envoi des séances sur la montre | à faire |
-| 6 | Finitions, notifications, tests | à faire |
+| 6 | Finitions, notifications, tests. **À voir avec l'utilisateur (demande du 2026-11-13) : garder l'app disponible en permanence sans payer** (renouvellement auto Sideloadly en Wi-Fi, SideStore sur l'iPhone ; le compte Apple payant est la seule voie sans renouvellement hebdomadaire). | à faire |
 
 Détail des tâches, fichiers, critères de validation et risques : `ARCHITECTURE.md` §8.
 Lève les points **[À VÉRIFIER étape N]** de ton étape avant d'écrire le code qui en dépend.

@@ -6,16 +6,19 @@ import RunCoachCore
 /// Avec la carte SwiftUI en relief, la caméra envoyée à chaque image n'était pas appliquée (constat sur l'iPhone,
 /// 2026-11-13) : la carte restait figée pendant que le tracé dessiné par-dessus avançait.
 /// Ici, à chaque image : la caméra est posée sur la carte, puis le tracé est projeté avec cette même caméra
-/// et redessiné en coordonnées d'écran, au-dessus des arbres et bâtiments 3D.
+/// et redessiné en coordonnées d'écran, au-dessus de la carte.
 struct ReplayMapView: UIViewRepresentable {
     /// Points du tracé (un tous les 12 m environ) et distance parcourue à chacun (m).
     let coordinates: [CLLocationCoordinate2D]
     let distances: [Double]
     let currentDistM: Double
     let runner: CLLocationCoordinate2D
-    let heading: Double
-    /// 0 = incliné en relief, 1 = satellite à plat, 2 = plan.
+    let camera: ReplayCamera
+    /// 0 = satellite incliné sans relief, 1 = relief 3D, 2 = plan.
     let style: Int
+    /// Partie du tracé dessinée, derrière et devant le coureur (tout le tracé pendant l'entrée et la sortie).
+    let behindM: Double
+    let aheadM: Double
 
     func makeUIView(context: Context) -> ReplayMapContainer { ReplayMapContainer() }
 
@@ -29,10 +32,6 @@ final class ReplayMapContainer: UIView {
     private let dot = CAShapeLayer()
     private var current: ReplayMapView?
     private var style = -1
-
-    /// Partie du tracé projetée à chaque image, derrière et devant le coureur : borne le nombre de points.
-    private let behindM = 600.0
-    private let aheadM = 1500.0
 
     init() {
         super.init(frame: .zero)
@@ -74,12 +73,11 @@ final class ReplayMapContainer: UIView {
             style = state.style
             map.preferredConfiguration = Self.configuration(style)
         }
-        let tilted = state.style == 0
-        let distanceM = tilted ? 500.0 : 600.0
-        let pitch = tilted ? 60.0 : 0.0
+        let cam = state.camera
         // Sans animation : la caméra est appliquée tout de suite, la projection ci-dessous l'utilise.
-        map.setCamera(MKMapCamera(lookingAtCenter: state.runner, fromDistance: distanceM,
-                                  pitch: pitch, heading: state.heading), animated: false)
+        map.setCamera(MKMapCamera(lookingAtCenter: CLLocationCoordinate2D(latitude: cam.centerLat, longitude: cam.centerLon),
+                                  fromDistance: cam.distanceM, pitch: cam.pitchDeg, heading: cam.headingDeg),
+                      animated: false)
         guard bounds.width > 0 else { return }
 
         let doneLine = UIBezierPath(), aheadLine = UIBezierPath()
@@ -88,13 +86,14 @@ final class ReplayMapContainer: UIView {
         var donePenDown = false, aheadPenDown = true
         for i in state.coordinates.indices {
             let d = state.distances[i]
-            guard d > state.currentDistM - behindM, d < state.currentDistM + aheadM else { continue }
+            guard d > state.currentDistM - state.behindM, d < state.currentDistM + state.aheadM else { continue }
             let isDone = d <= state.currentDistM
             let c = state.coordinates[i]
             // Un point derrière la caméra inclinée est projeté n'importe où : il coupe le trait au lieu d'y entrer.
             guard ReplayDirector.isInFrontOfCamera(lat: c.latitude, lon: c.longitude,
-                                                   centerLat: state.runner.latitude, centerLon: state.runner.longitude,
-                                                   headingDeg: state.heading, cameraDistanceM: distanceM, pitchDeg: pitch) else {
+                                                   centerLat: cam.centerLat, centerLon: cam.centerLon,
+                                                   headingDeg: cam.headingDeg, cameraDistanceM: cam.distanceM,
+                                                   pitchDeg: cam.pitchDeg) else {
                 if isDone { donePenDown = false } else { aheadPenDown = false }
                 continue
             }
@@ -116,14 +115,18 @@ final class ReplayMapContainer: UIView {
         CATransaction.commit()
     }
 
+    /// Satellite sans relief : aucun arbre ni bâtiment 3D, donc un trait dessiné au-dessus reste exactement
+    /// sur le sol. Avec le relief, le trait (au sol) glissait sur les objets 3D quand la caméra bougeait.
     private static func configuration(_ style: Int) -> MKMapConfiguration {
         switch style {
         case 0:
-            let configuration = MKHybridMapConfiguration(elevationStyle: .realistic)
+            let configuration = MKHybridMapConfiguration(elevationStyle: .flat)
             configuration.pointOfInterestFilter = .excludingAll
             return configuration
         case 1:
-            return MKImageryMapConfiguration(elevationStyle: .flat)
+            let configuration = MKHybridMapConfiguration(elevationStyle: .realistic)
+            configuration.pointOfInterestFilter = .excludingAll
+            return configuration
         default:
             let configuration = MKStandardMapConfiguration(elevationStyle: .flat)
             configuration.pointOfInterestFilter = .excludingAll

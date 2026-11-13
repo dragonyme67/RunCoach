@@ -5,7 +5,7 @@ import XCTest
 /// Un test par apparence : si le simulateur se bloque, la CI ne relance que la moitié concernée.
 final class ScreenshotTests: XCTestCase {
     private let screens = [
-        "today", "plan", "planned", "strength", "activities", "run", "activity", "replay", "replaymap",
+        "today", "plan", "planned", "strength", "activities", "run", "activity", "replay", "replaymap", "replayrelief",
         "coach", "progress", "settings", "onboarding"
     ]
 
