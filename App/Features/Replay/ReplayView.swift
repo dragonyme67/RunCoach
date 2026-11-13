@@ -3,16 +3,20 @@ import MapKit
 import Charts
 import RunCoachCore
 
-/// Replay d'une sortie : carte à plat qui tourne avec le coureur (il avance toujours vers le haut de l'écran).
-/// Pas de relief 3D : les arbres et bâtiments 3D y masquaient le tracé.
+/// Replay d'une sortie : carte qui tourne avec le coureur (il avance toujours vers le haut de l'écran).
+/// Par défaut, vue inclinée en relief avec le tracé dessiné par-dessus (`TrackOverlay`, prototype 3.0) :
+/// posé sur la carte, il disparaissait sous les arbres et bâtiments 3D. Modes à plat : tracé posé sur la carte.
 /// Fluidité : la position est interpolée entre deux relevés à chaque image, et rien ne bouge sur la carte
-/// sauf la caméra. Le point du coureur est fixe au centre de l'écran, puisque la caméra est centrée sur lui.
+/// sauf la caméra.
 // shortcut: la lecture avance à 30 fois le temps réel sur l'indice des relevés, supposés réguliers ;
 // l'étape 3 la cale sur les horodatages réels si les relevés Garmin ne le sont pas (ARCHITECTURE.md §8).
 struct ReplayView: View {
     let run: Run
-    /// 0 = satellite, 1 = plan.
+    /// 0 = incliné en relief (prototype 3.0, tracé en surimpression), 1 = satellite à plat, 2 = plan.
     @State var style = 0
+    @State private var cameraTick = 0
+    /// Indices des points dessinés en surimpression : un tous les 12 m environ.
+    @State private var overlayIndices: [Int] = []
     @Environment(\.dismiss) private var dismiss
     @State private var track: Track?
     @State private var coordinates: [CLLocationCoordinate2D] = []
@@ -45,6 +49,7 @@ struct ReplayView: View {
             let loaded = run.loadTrack()
             track = loaded
             coordinates = RouteMap.coordinates(loaded)
+            overlayIndices = Self.overlayIndices(loaded?.dist ?? [], stepM: 12)
             chartPoints = makeChartPoints()
             updateCamera()
         }
@@ -81,25 +86,68 @@ struct ReplayView: View {
     }
 
     private var map: some View {
-        ZStack {
-            // Carte non manipulable : la caméra suit le coureur, un geste la décalerait du point fixe.
-            Map(position: $position, interactionModes: []) {
-                if coordinates.count > 1 {
-                    MapPolyline(coordinates: coordinates)
-                        .stroke(Color.white.opacity(0.55), lineWidth: 4)
-                    MapPolyline(coordinates: Array(coordinates.prefix(max(2, index + 1))))
-                        .stroke(Color.rc.accent, lineWidth: 5)
+        MapReader { proxy in
+            ZStack {
+                // Carte non manipulable : la caméra suit le coureur, un geste la décalerait du point fixe.
+                Map(position: $position, interactionModes: []) {
+                    if coordinates.count > 1 && style != 0 {
+                        MapPolyline(coordinates: coordinates)
+                            .stroke(Color.white.opacity(0.55), lineWidth: 4)
+                        MapPolyline(coordinates: Array(coordinates.prefix(max(2, index + 1))))
+                            .stroke(Color.rc.accent, lineWidth: 5)
+                    }
+                }
+                .mapStyle(mapStyle)
+                // La surimpression se recale sur la caméra réellement affichée, pas sur celle demandée.
+                .onMapCameraChange(frequency: .continuous) { cameraTick &+= 1 }
+                if style == 0, let track {
+                    let pose = track.pose(at: progress)
+                    TrackOverlay(proxy: proxy,
+                                 coordinates: overlayIndices.map { coordinates[$0] },
+                                 distances: overlayIndices.map { track.dist[$0] },
+                                 currentDistM: currentDistM,
+                                 runner: CLLocationCoordinate2D(latitude: pose.lat, longitude: pose.lon),
+                                 cameraTick: cameraTick)
+                } else {
+                    Circle()
+                        .fill(Color.rc.accent)
+                        .frame(width: 26, height: 26)
+                        .overlay(Circle().stroke(Color.white, lineWidth: 4))
+                        .shadow(radius: 4)
+                        .accessibilityHidden(true)
                 }
             }
-            .mapStyle(style == 1 ? .standard(elevation: .flat) : .imagery(elevation: .flat))
-            Circle()
-                .fill(Color.rc.accent)
-                .frame(width: 26, height: 26)
-                .overlay(Circle().stroke(Color.white, lineWidth: 4))
-                .shadow(radius: 4)
-                .accessibilityHidden(true)
         }
         .ignoresSafeArea()
+    }
+
+    private var mapStyle: MapStyle {
+        switch style {
+        case 0: return .hybrid(elevation: .realistic, pointsOfInterest: .excludingAll)
+        case 1: return .imagery(elevation: .flat)
+        default: return .standard(elevation: .flat)
+        }
+    }
+
+    /// Distance parcourue à la position de lecture, interpolée entre deux relevés comme `Track.pose(at:)`.
+    private var currentDistM: Double {
+        guard let dist = track?.dist, dist.count > 1 else { return 0 }
+        let position = max(0, min(1, progress)) * Double(dist.count - 1)
+        let i = min(dist.count - 2, Int(position))
+        return dist[i] + (dist[i + 1] - dist[i]) * (position - Double(i))
+    }
+
+    /// Un indice tous les `stepM` mètres, plus le dernier : borne le nombre de points projetés par image.
+    static func overlayIndices(_ dist: [Double], stepM: Double) -> [Int] {
+        guard let first = dist.first else { return [] }
+        var indices: [Int] = []
+        var next = first
+        for (i, d) in dist.enumerated() where d >= next {
+            indices.append(i)
+            next = d + stepM
+        }
+        if indices.last != dist.count - 1 { indices.append(dist.count - 1) }
+        return indices
     }
 
     private var closeButton: some View {
@@ -112,10 +160,10 @@ struct ReplayView: View {
                 isPlaying = false
                 Task { await openStreet() }
             }
-            mapButton(style == 0 ? "globe.europe.africa.fill" : "map.fill", label: "Style de carte") {
-                style = (style + 1) % 2
+            mapButton(["view.3d", "globe.europe.africa.fill", "map.fill"][style], label: "Style de carte") {
+                style = (style + 1) % 3
             }
-            .accessibilityValue(style == 0 ? "Satellite" : "Plan")
+            .accessibilityValue(["Inclinée", "Satellite à plat", "Plan"][style])
         }
         .padding(.horizontal, Spacing.l)
     }
@@ -246,13 +294,13 @@ struct ReplayView: View {
 
     private func updateCamera() {
         guard coordinates.count > 1, let pose = track?.pose(at: progress) else { return }
-        // Cap = sens de la course : le coureur avance vers le haut de l'écran. Légère inclinaison, vue « derrière lui ».
+        // Cap = sens de la course : le coureur avance vers le haut de l'écran.
+        // Incliné : vue « derrière lui » à 60°. À plat et plan : du dessus (le plan incliné affiche des arbres 3D).
         position = .camera(MapCamera(
             centerCoordinate: CLLocationCoordinate2D(latitude: pose.lat, longitude: pose.lon),
-            distance: 600,
+            distance: style == 0 ? 500 : 600,
             heading: pose.heading,
-            // Plan vu du dessus : incliné, il affiche des arbres 3D qui recouvrent le point (constat de la CI).
-            pitch: style == 1 ? 0 : 45
+            pitch: style == 0 ? 60 : 0
         ))
     }
 }

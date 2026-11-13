@@ -105,10 +105,11 @@ final class Run {
         splits.sorted { $0.index < $1.index }
     }
 
-    /// Décode le tracé. Coûteux : à appeler une fois, hors du corps d'une vue.
+    /// Décode le tracé, positions lissées pour l'affichage (la base garde les relevés bruts).
+    /// Coûteux : à appeler une fois, hors du corps d'une vue.
     func loadTrack() -> Track? {
         guard let data = track?.samplesData else { return nil }
-        return try? JSONDecoder().decode(Track.self, from: data)
+        return (try? JSONDecoder().decode(Track.self, from: data))?.smoothed(windowM: 10)
     }
 }
 

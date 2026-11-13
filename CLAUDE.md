@@ -44,8 +44,8 @@ Si un fait d'`ARCHITECTURE.md` s'avère faux, corrige-le là-bas dans le même c
 |---|---|---|
 | 0 | Architecture (`ARCHITECTURE.md`) | fait le 2026-11-12 |
 | 1 | Squelette, design system, données factices, CI, première installation | fait ; testé sur l'iPhone et accepté par l'utilisateur le 2026-11-13 (orange, onglet Activités, renfo, replay à plat). Sa demande restante, le replay vivant, est l'étape 3. |
-| 2 | Connexion Garmin et import. Validation 2.0 réussie le 2026-11-13 (séance de test reçue sur la montre). | codée ; en attente du test sur l'iPhone |
-| 3 | Replay vivant : vue inclinée, entrée en zoom, effets. **Commencer par le prototype 3.0 et le faire valider.** | à faire |
+| 2 | Connexion Garmin et import (tout l'historique au premier passage, puis ce qui manque). | fait ; validé sur l'iPhone par l'utilisateur le 2026-11-13 |
+| 3 | Replay vivant : vue inclinée, entrée en zoom, effets. **Commencer par le prototype 3.0 et le faire valider.** | 3.0 livré le 2026-11-13 (avec lissage du zigzag GPS) ; en attente du verdict |
 | 4 | Coach IA, génération et adaptation du plan, chat | à faire |
 | 5 | Envoi des séances sur la montre | à faire |
 | 6 | Finitions, notifications, tests | à faire |

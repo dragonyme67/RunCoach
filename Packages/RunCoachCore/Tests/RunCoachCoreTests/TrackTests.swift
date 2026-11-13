@@ -34,6 +34,26 @@ final class TrackTests: XCTestCase {
         XCTAssertEqual(north.pose(at: 2).lat, 48.0009, accuracy: 1e-9)
     }
 
+    func testSmoothingRemovesGPSZigzagAndKeepsEnds() {
+        // Ligne droite vers l'est, un relevé tous les 3 m, alternativement 3 m au nord et 3 m au sud.
+        let n = 200
+        let mPerDegLat = 111_320.0
+        let dist = (0..<n).map { Double($0) * 3 }
+        let lat = (0..<n).map { 48 + ($0 % 2 == 0 ? 3.0 : -3.0) / mPerDegLat }
+        let lon = dist.map { 2 + $0 / (mPerDegLat * cos(48 * .pi / 180)) }
+        let track = Track(t: dist, lat: lat, lon: lon, dist: dist)
+        let smooth = track.smoothed(windowM: 10)
+
+        XCTAssertEqual(smooth.count, n)
+        XCTAssertLessThan(zip(smooth.lon, track.lon).map { abs($0 - $1) }.max()!, 1e-9,
+                          "seule la dérive latérale est lissée sur une ligne droite")
+        XCTAssertEqual(smooth.lat[0], track.lat[0], "le départ ne bouge pas")
+        XCTAssertEqual(smooth.lat[n - 1], track.lat[n - 1], "l'arrivée ne bouge pas")
+        let worstMiddle = (10..<(n - 10)).map { abs(smooth.lat[$0] - 48) * mPerDegLat }.max()!
+        XCTAssertLessThan(worstMiddle, 1, "écart latéral résiduel en mètres")
+        XCTAssertEqual(track.smoothed(windowM: 0), track)
+    }
+
     func testPoseHeadingCrossesNorthTheShortWay() {
         // Virage de 340° (nord-nord-ouest) à 20° (nord-nord-est) : le cap interpolé doit rester près du nord.
         var lat = [48.0], lon = [2.0]

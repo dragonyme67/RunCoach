@@ -66,6 +66,25 @@ public struct Track: Codable, Equatable, Sendable {
         )
     }
 
+    /// Positions lissées pour l'affichage : moyenne des relevés à ±`windowM` mètres de parcours.
+    /// Le GPS d'une montre ondule de quelques mètres de part et d'autre du vrai chemin ; avec un relevé tous les
+    /// 2 à 3 m, le trait relie ces écarts et zigzague. Fenêtre symétrique : le départ et l'arrivée ne bougent pas.
+    public func smoothed(windowM: Double) -> Track {
+        let n = min(lat.count, lon.count, dist.count)
+        guard n > 2, windowM > 0 else { return self }
+        var out = self
+        for i in 0..<n {
+            let radius = min(windowM, dist[i] - dist[0], dist[n - 1] - dist[i])
+            var j0 = i, j1 = i
+            while j0 > 0, dist[i] - dist[j0 - 1] <= radius { j0 -= 1 }
+            while j1 < n - 1, dist[j1 + 1] - dist[i] <= radius { j1 += 1 }
+            let count = Double(j1 - j0 + 1)
+            out.lat[i] = lat[j0...j1].reduce(0, +) / count
+            out.lon[i] = lon[j0...j1].reduce(0, +) / count
+        }
+        return out
+    }
+
     /// Découpage par kilomètre, le dernier partiel gardé s'il dépasse 50 m.
     /// Calculé depuis le tracé : les « tours » Garmin suivent les étapes d'une séance, pas les kilomètres.
     public func kmSplits() -> [KmSplit] {
