@@ -66,6 +66,49 @@ public struct Track: Codable, Equatable, Sendable {
         )
     }
 
+    /// Découpage par kilomètre, le dernier partiel gardé s'il dépasse 50 m.
+    /// Calculé depuis le tracé : les « tours » Garmin suivent les étapes d'une séance, pas les kilomètres.
+    public func kmSplits() -> [KmSplit] {
+        let n = min(t.count, dist.count)
+        guard n > 1 else { return [] }
+        var splits: [KmSplit] = []
+        var startIndex = 0
+        var startTime = t[0]
+        var nextKm = 1.0
+
+        func close(at index: Int, time: Double, distanceM: Double) {
+            let range = startIndex...index
+            func mean(_ c: [Double]?) -> Double? { c.map { c in range.map { c[$0] }.reduce(0, +) / Double(range.count) } }
+            var gain: Double?, loss: Double?
+            if let ele {
+                gain = 0; loss = 0
+                for i in range.dropFirst() {
+                    let delta = ele[i] - ele[i - 1]
+                    if delta > 0 { gain! += delta } else { loss! -= delta }
+                }
+            }
+            splits.append(KmSplit(index: splits.count + 1, distanceM: distanceM, durationS: time - startTime,
+                                  avgHR: mean(hr).map { Int($0.rounded()) }, avgCadenceSpm: mean(cad),
+                                  elevationGainM: gain, elevationLossM: loss))
+            startIndex = index
+            startTime = time
+        }
+
+        for i in 1..<n {
+            while dist[i] - dist[0] >= nextKm * 1000 {
+                let target = dist[0] + nextKm * 1000
+                let f = (target - dist[i - 1]) / (dist[i] - dist[i - 1])
+                close(at: i, time: t[i - 1] + f * (t[i] - t[i - 1]), distanceM: 1000)
+                nextKm += 1
+            }
+        }
+        let rest = dist[n - 1] - dist[0] - (nextKm - 1) * 1000
+        if rest > 50 {
+            close(at: n - 1, time: t[n - 1], distanceM: rest)
+        }
+        return splits
+    }
+
     /// Vrai si toutes les colonnes présentes ont la même longueur.
     public var isConsistent: Bool {
         let n = t.count
@@ -76,4 +119,18 @@ public struct Track: Codable, Equatable, Sendable {
         }
         return true
     }
+}
+
+/// Un kilomètre de sortie (ou le dernier morceau), prêt à copier dans l'entité `Split`.
+public struct KmSplit: Equatable, Sendable {
+    /// À partir de 1.
+    public var index: Int
+    public var distanceM: Double
+    public var durationS: Double
+    public var avgHR: Int?
+    public var avgCadenceSpm: Double?
+    public var elevationGainM: Double?
+    public var elevationLossM: Double?
+
+    public var avgSpeedMps: Double? { durationS > 0 ? distanceM / durationS : nil }
 }
