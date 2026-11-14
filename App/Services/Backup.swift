@@ -86,7 +86,9 @@ enum Backup {
     }
 
     struct SyncItem: Codable {
-        var lastGarminSyncAt: Date?, backfillDone: Bool, garminDisplayName: String?
+        var lastGarminSyncAt: Date?
+        var backfillDone: Bool
+        var garminDisplayName: String?
     }
 
     // MARK: - Export
