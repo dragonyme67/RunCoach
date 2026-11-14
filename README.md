@@ -57,6 +57,29 @@ prévient 2 jours avant si tu actives les rappels). Pour la prolonger :
 - **Ne supprime jamais l'app pour la réinstaller** : supprimer l'app efface toutes ses données.
 - Sideloadly sait aussi rafraîchir l'app tout seul en Wi-Fi quand le PC est allumé (option « auto-refresh »).
 
+## Option sans PC chaque semaine : SideStore
+SideStore est une app installée sur l'iPhone qui renouvelle elle-même la signature de 7 jours, en Wi-Fi, sans PC.
+Le PC ne sert qu'une fois, pour l'installer. Guide officiel : [docs.sidestore.io](https://docs.sidestore.io/docs/installation/prerequisites).
+
+1. iPhone : **Mode développeur** activé (étape 2). Installe **LocalDevVPN** depuis l'App Store.
+2. PC : télécharge **iLoader** (lien dans le guide officiel, page *Install*), branche l'iPhone en USB, connecte-toi
+   avec ton identifiant Apple et choisis **Install SideStore (Stable)**. iLoader crée aussi le « fichier
+   d'appairage » dont SideStore a besoin.
+3. iPhone : Réglages → Général → VPN et gestion de l'appareil → **Faire confiance**. Ouvre LocalDevVPN →
+   **Connect**, puis ouvre SideStore et touche le compteur **7 DAYS** de SideStore pour finir l'installation.
+4. Ajoute la source de RunCoach : SideStore → **Sources** → **+** → colle
+   `https://github.com/dragonyme67/RunCoach/releases/latest/download/source.json`, puis installe RunCoach.
+   Chaque nouvelle version compilée apparaît ensuite dans SideStore comme une mise à jour.
+5. Laisse **LocalDevVPN connecté** : SideStore renouvelle alors les apps tout seul en arrière-plan, en Wi-Fi.
+   Pour plus de sûreté, une automatisation quotidienne dans l'app Raccourcis peut lancer l'action de
+   rafraîchissement de SideStore.
+
+> **Attention aux données.** SideStore installe probablement RunCoach comme une app distincte de celle posée par
+> Sideloadly (il modifie l'identifiant des apps signées avec un compte gratuit). Dans ce cas la nouvelle copie
+> repart de zéro : refais la configuration, reconnecte Garmin (l'historique se réimporte tout seul) et
+> régénère le plan. Supprime ensuite l'ancienne copie pour libérer une place (3 apps au plus par compte gratuit).
+> Si le fichier d'appairage ne marche plus (mise à jour d'iOS, réinitialisation), refais l'étape 2.
+
 ## En cas de souci
 - **« Garmin refuse la connexion pour le moment »** : Garmin limite les appels. L'app réessaie seule plus tard ;
   ne te reconnecte pas en boucle, ça aggrave le blocage.

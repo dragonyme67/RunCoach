@@ -217,6 +217,17 @@ struct PlanView: View {
                     PlannedRow(workout: workout)
                 }
                 .buttonStyle(.plain)
+            } else if day.id >= DayKey.key(Date()), let cancelled = workouts.first(where: { $0.dayKey == day.id && $0.status == "cancelled" }) {
+                // Séance annulée à venir : sa fiche permet de la rétablir.
+                NavigationLink(value: cancelled) {
+                    Text("Repos · \(cancelled.title) annulée")
+                        .font(.subheadline)
+                        .strikethrough()
+                        .foregroundStyle(Color.rc.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, Spacing.m)
+                }
+                .buttonStyle(.plain)
             } else {
                 Text("Repos")
                     .font(.subheadline)
@@ -398,6 +409,14 @@ struct PlannedWorkoutDetailView: View {
                     }
                     Button("Annuler cette séance", role: .destructive) { confirmCancel = true }
                         .frame(maxWidth: .infinity)
+                } else if workout.status == "cancelled", workout.dayKey >= DayKey.key(Date()) {
+                    // Rétablie telle quelle, sans repasser par le coach ni les garde-fous : elle les avait déjà passés.
+                    PrimaryButton(title: "Rétablir cette séance", icon: "arrow.uturn.backward") {
+                        workout.status = "planned"
+                        workout.garminSyncState = "notSent"
+                        workout.updatedAt = Date()
+                        Task { await sync.pushWorkouts() }
+                    }
                 }
             }
             .padding(Spacing.l)

@@ -10,13 +10,14 @@ struct ProgressScreen: View {
     @Query private var goals: [Goal]
     @Environment(CoachService.self) private var coach
     @State private var analysis: FitnessAnalysis?
+    @State private var predictedS: Double?
 
     var body: some View {
         let weeks = WeekVolume.last(12, runs: runs)
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.l) {
                 if let goal = goals.first(where: { $0.isActive }) {
-                    GoalCard(goal: goal, runs: runs)
+                    GoalCard(goal: goal, estimatedTimeS: predictedS)
                 }
                 if let analysis {
                     FitnessCard(analysis: analysis)
@@ -84,7 +85,10 @@ struct ProgressScreen: View {
         .rcScreenBackground()
         .navigationTitle("Progrès")
         // Décode les tracés des 6 dernières semaines : une fois à l'ouverture, pas à chaque rendu.
-        .task(id: runs.count) { analysis = coach.analysis() }
+        .task(id: runs.count) {
+            analysis = coach.analysis()
+            predictedS = coach.predictedRaceS()
+        }
     }
 
     /// Temps cumulé par zone sur les 28 derniers jours.
@@ -191,7 +195,8 @@ struct WeekVolume: Identifiable {
 
 struct GoalCard: View {
     let goal: Goal
-    let runs: [Run]
+    /// Estimation du coach (`CoachService.predictedRaceS`).
+    let estimatedTimeS: Double?
 
     var body: some View {
         let daysLeft = goal.raceDate.map { DayKey.calendar.dateComponents([.day], from: Date(), to: $0).day ?? 0 }
@@ -225,15 +230,6 @@ struct GoalCard: View {
             }
         }
         .rcCard(padding: Spacing.xl)
-    }
-
-    // shortcut: estimation grossière (formule de Riegel sur la sortie la plus rapide récente) ;
-    // remplacée par `PaceModel` à l'étape 4.
-    private var estimatedTimeS: Double? {
-        guard let distance = goal.raceDistanceM,
-              let best = runs.prefix(9).filter({ $0.distanceM >= 3000 }).min(by: { $0.paceSPerKm < $1.paceSPerKm })
-        else { return nil }
-        return best.durationS * pow(distance / best.distanceM, 1.06)
     }
 }
 

@@ -295,6 +295,16 @@ final class CoachService {
         return SnapshotBuilder.analysis(snapshotInput(profile: profile, goal: goal, context: context, today: Date()))
     }
 
+    /// Temps de course estimé aujourd'hui, le même que celui que reçoit le coach (`PaceModel`, §6.3).
+    func predictedRaceS() -> Double? {
+        let context = container.mainContext
+        guard let profile = (try? context.fetch(FetchDescriptor<AthleteProfile>()))?.first,
+              let goal = (try? context.fetch(FetchDescriptor<Goal>()))?.first(where: { $0.isActive }),
+              let distanceM = goal.raceDistanceM else { return nil }
+        let input = snapshotInput(profile: profile, goal: goal, context: context, today: Date())
+        return PaceModel.predictedRaceS(thresholdSPerKm: SnapshotBuilder.thresholdSPerKm(input), distanceKm: distanceM / 1000)
+    }
+
     /// Envoie un message au coach. La réponse est enregistrée ; une douleur ou une fatigue déclarée agit tout de suite
     /// sur le profil (§6.6), sans attendre de confirmation.
     func send(_ text: String) async {
