@@ -75,4 +75,28 @@ final class GarminAPITests: XCTestCase {
         do { _ = try await api.socialProfile(); XCTFail() } catch { XCTAssertEqual(error as? GarminError, .needsLogin) }
         XCTAssertTrue(http.requests.isEmpty)
     }
+
+    func testWorkoutCreateScheduleListDelete() async throws {
+        let (api, http) = makeAPI({ request in
+            switch (request.method, request.url.path) {
+            case ("POST", "/workout-service/workout"): return json(200, #"{"workoutId":123,"workoutName":"RC · x"}"#)
+            case ("POST", "/workout-service/schedule/123"): return json(200, #"{"workoutScheduleId":456}"#)
+            case ("GET", "/workout-service/workouts"): return json(200, #"[{"workoutId":123,"workoutName":"RC · x"}]"#)
+            case ("DELETE", "/workout-service/workout/123"): return HTTPResponse(status: 204)
+            default: return json(404, "")
+            }
+        })
+        let id = try await api.createWorkout(Data(#"{"workoutName":"RC · x"}"#.utf8))
+        XCTAssertEqual(id, 123)
+        let scheduleId = try await api.schedule(workoutId: id, day: "2026-11-18")
+        XCTAssertEqual(scheduleId, 456)
+        let list = try await api.workouts()
+        XCTAssertEqual(list, [WorkoutRefDTO(workoutId: 123, workoutName: "RC · x")])
+        try await api.deleteWorkout(id)
+
+        XCTAssertEqual(http.requests[0].headers["Content-Type"], "application/json")
+        XCTAssertEqual(String(decoding: http.requests[1].body ?? Data(), as: UTF8.self), #"{"date":"2026-11-18"}"#)
+        XCTAssertEqual(http.requests[2].url.query, "limit=100&myWorkoutsOnly=true&start=0")
+        XCTAssertNil(http.requests[3].body)
+    }
 }

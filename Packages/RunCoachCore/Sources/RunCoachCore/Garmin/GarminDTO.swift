@@ -106,3 +106,16 @@ public struct SocialProfileDTO: Decodable, Sendable {
     public var displayName: String?
     public var fullName: String?
 }
+
+/// Réponse de création (`workoutId`) ou de planification (`workoutScheduleId`) d'un workout, élément de la liste des workouts.
+public struct WorkoutRefDTO: Decodable, Sendable, Equatable {
+    public var workoutId: Int64?
+    public var workoutName: String?
+    public var workoutScheduleId: Int64?
+
+    public init(workoutId: Int64?, workoutName: String?, workoutScheduleId: Int64? = nil) {
+        self.workoutId = workoutId
+        self.workoutName = workoutName
+        self.workoutScheduleId = workoutScheduleId
+    }
+}
