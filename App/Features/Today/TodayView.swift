@@ -71,7 +71,7 @@ struct TodayView: View {
         }
         // Tâche détachée : SwiftUI annule la tâche de `refreshable` quand l'écran se redessine pendant une longue synchro,
         // ce qui affichait « Hors ligne » à tort (constat sur l'iPhone, 2026-11-14).
-        .refreshable { await Task { await sync.sync(background: false) }.value }
+        .refreshable { await Task<Void, Never> { _ = await sync.sync(background: false) }.value }
         .rcScreenBackground()
         .toolbar(.hidden, for: .navigationBar)
         .fullScreenCover(isPresented: $showGarminLogin) { GarminLoginView() }

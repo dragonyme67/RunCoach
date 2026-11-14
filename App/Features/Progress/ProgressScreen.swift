@@ -261,7 +261,7 @@ struct RunListView: View {
             }
             .padding(Spacing.l)
         }
-        .refreshable { await Task { await sync.sync(background: false) }.value }
+        .refreshable { await Task<Void, Never> { _ = await sync.sync(background: false) }.value }
         .rcScreenBackground()
         .navigationTitle("Activités")
     }
