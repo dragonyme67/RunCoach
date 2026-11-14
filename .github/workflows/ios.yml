@@ -65,7 +65,7 @@ jobs:
             -destination "generic/platform=iOS" \
             -derivedDataPath build/dd-ios \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            CURRENT_PROJECT_VERSION=${{ github.run_number }}
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} MARKETING_VERSION=0.1.${{ github.run_number }}
           mkdir -p build/ipa/Payload
           cp -R build/dd-ios/Build/Products/Release-iphoneos/RunCoach.app build/ipa/Payload/
           (cd build/ipa && zip -qry ../RunCoach.ipa Payload)
