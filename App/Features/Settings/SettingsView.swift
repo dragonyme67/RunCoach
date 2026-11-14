@@ -12,6 +12,10 @@ struct SettingsView: View {
     @Environment(CoachService.self) private var coach
     @State private var showOnboarding = false
     @State private var showGarminLogin = false
+    @Environment(\.modelContext) private var context
+    @AppStorage(Notifications.enabledKey) private var notificationsOn = false
+    @AppStorage(Notifications.minuteKey) private var reminderMinute = Notifications.defaultMinute
+    @State private var notificationsDenied = false
 
     var body: some View {
         Form {
@@ -113,6 +117,33 @@ struct SettingsView: View {
             }
 
             Section {
+                Toggle("Rappels", isOn: $notificationsOn)
+                if notificationsOn {
+                    DatePicker("Séance du jour à", selection: Binding(
+                        get: { Calendar.current.date(bySettingHour: reminderMinute / 60, minute: reminderMinute % 60, second: 0, of: Date()) ?? Date() },
+                        set: {
+                            let parts = Calendar.current.dateComponents([.hour, .minute], from: $0)
+                            reminderMinute = (parts.hour ?? 7) * 60 + (parts.minute ?? 0)
+                        }), displayedComponents: .hourAndMinute)
+                }
+            } header: {
+                Text("Notifications")
+            } footer: {
+                Text(notificationsDenied
+                     ? "Notifications refusées : autorise-les dans Réglages iOS → RunCoach."
+                     : "Séance du jour, point du dimanche à 19 h, et rappel 2 jours avant que l'app expire.")
+            }
+            .onChange(of: notificationsOn) { _, on in
+                Task {
+                    if on { notificationsDenied = !(await Notifications.requestAuthorization()) }
+                    await Notifications.reschedule(context: context)
+                }
+            }
+            .onChange(of: reminderMinute) {
+                Task { await Notifications.reschedule(context: context) }
+            }
+
+            Section {
                 Button("Refaire la configuration") {
                     showOnboarding = true
                 }
@@ -121,6 +152,14 @@ struct SettingsView: View {
                     Spacer()
                     Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "–")
                         .foregroundStyle(Color.rc.textSecondary)
+                }
+                if let expiry = Notifications.signatureExpiry {
+                    HStack {
+                        Text("Signature valable jusqu'au")
+                        Spacer()
+                        Text(expiry.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).hour().minute()))
+                            .foregroundStyle(expiry.timeIntervalSinceNow < 2 * 86_400 ? Color.rc.danger : Color.rc.textSecondary)
+                    }
                 }
             } header: {
                 Text("À propos")

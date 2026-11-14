@@ -1270,6 +1270,7 @@ Retour de l'utilisateur sur le plan B (2026-11-13) : trait mieux calé, mais (1)
 | Fichiers | `App/Services/Notifications.swift`, tous les écrans, `Resources/Assets.xcassets`, `README.md`. |
 | Validation | Captures de tous les états en clair et en sombre. Une semaine d'usage réel sans intervention : synchro, plan, envoi sur la montre. L'ami installe sa copie en suivant le README seul. |
 | Risques | Les notifications locales planifiées ne survivent pas à l'expiration de la signature ; pas de notifications push sans compte payant. |
+| État (2026-11-14) | 6.1 faite : `App/Services/Notifications.swift`, réglage Réglages → Notifications (désactivé par défaut, heure du rappel, refus d'iOS signalé) ; séance du jour sur 7 jours, dimanche 19 h, expiration de la signature − 2 jours à 18 h ; reprogrammées à chaque passage en arrière-plan et à chaque changement de réglage. Expiration lue dans `embedded.mobileprovision` (`Core/Support/SigningProfile.swift`, testé ; signature CMS non vérifiée, simple affichage) et affichée dans Réglages → À propos. 6.5 faite : icône (`App/Assets.xcassets/AppIcon.appiconset`, 1024 px, tracé orange et coureur ; dessinée par un script Pillow hors dépôt). 6.6 faite : `README.md` (installation Sideloadly, Garmin, clé Groq, renouvellement, dépannage). **6.0 en attente de la décision de l'utilisateur.** Restent 6.2 à 6.4 (états vides, accessibilité, performance), à faire au fil de ses retours. |
 
 ---
 

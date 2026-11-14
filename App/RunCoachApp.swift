@@ -42,7 +42,9 @@ struct RunCoachApp: App {
                     coach.updatePlanStatus()
                     await coach.autoGenerateIfNeeded()
                 }
-            case .background: BackgroundSync.schedule()
+            case .background:
+                BackgroundSync.schedule()
+                if !options.mockData { Task { await Notifications.reschedule(context: container.mainContext) } }
             default: break
             }
         }
