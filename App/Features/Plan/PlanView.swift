@@ -312,6 +312,7 @@ struct PlannedRow: View {
 struct PlannedWorkoutDetailView: View {
     let workout: PlannedWorkout
     @Environment(CoachService.self) private var coach
+    @Environment(SyncEngine.self) private var sync
     @Environment(\.dismiss) private var dismiss
     @State private var confirmCancel = false
 
@@ -327,8 +328,8 @@ struct PlannedWorkoutDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.l) {
                 HeroWorkoutCard(workout: workout)
-                if kind.isRun {
-                    WatchStateRow(state: workout.garminSyncState)
+                if workout.status == "planned" {
+                    WatchStateRow(state: workout.garminSyncState, error: workout.garminSyncError)
                 }
                 if let spec = spec, !spec.blocks.isEmpty {
                     VStack(alignment: .leading, spacing: Spacing.s) {
@@ -373,6 +374,7 @@ struct PlannedWorkoutDetailView: View {
                 workout.status = "cancelled"
                 workout.updatedAt = Date()
                 if workout.garminWorkoutId != nil { workout.garminSyncState = "needsUpdate" }
+                Task { await sync.pushWorkouts() }
                 dismiss()
             }
             Button("Garder la séance", role: .cancel) {}

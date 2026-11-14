@@ -225,12 +225,21 @@ struct TodayView: View {
 /// État d'envoi de la séance sur la montre.
 struct WatchStateRow: View {
     let state: String
+    /// Raison de l'échec, montrée dans le détail d'une séance (§5.5).
+    var error: String? = nil
 
     var body: some View {
-        Label(text, systemImage: icon)
-            .font(.subheadline.weight(.medium))
-            .foregroundStyle(color)
-            .padding(.horizontal, Spacing.s)
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Label(text, systemImage: icon)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(color)
+            if state == "failed", let error {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(Color.rc.textSecondary)
+            }
+        }
+        .padding(.horizontal, Spacing.s)
     }
 
     private var text: String {

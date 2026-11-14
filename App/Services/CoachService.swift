@@ -19,6 +19,8 @@ final class CoachService {
     private(set) var chatError: String?
     /// Message préparé depuis un autre écran (« En parler au coach ») : l'onglet Coach s'ouvre et le reprend.
     var pendingDraft: String?
+    /// Appelé quand des séances changent (génération, actions du chat) : envoi sur la montre (F3).
+    @ObservationIgnored var onPlanChanged: (() -> Void)?
 
     /// Fournisseur choisi dans Réglages (Groq par défaut). Pas secret : gardé dans les préférences.
     var providerId: String {
@@ -184,6 +186,7 @@ final class CoachService {
         }
         try? context.save()
         notice = result.notice ?? result.summary
+        onPlanChanged?()
     }
 
     /// Cahier des charges d'une semaine du plan.
@@ -389,6 +392,7 @@ final class CoachService {
         }
         message.actionsState = "applied"
         try? context.save()
+        onPlanChanged?()
     }
 
     /// Séances des 14 prochains jours, détail complet, avec le nom français des exercices de renfo.

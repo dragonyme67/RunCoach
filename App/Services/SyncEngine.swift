@@ -103,6 +103,8 @@ final class SyncEngine {
                 state.garminDisplayName = profile.fullName ?? profile.displayName
             }
             let listComplete = try await importList(untilKnown: state.backfillDone, hasBudget: hasBudget)
+            // Avant les tracés : pendant le premier import, ceux-ci peuvent prendre de longues minutes.
+            try await mirrorWatch(hasBudget: hasBudget)
             let detailsComplete = try await importDetails(hasBudget: hasBudget)
             try await importMetrics(hasBudget: hasBudget)
 
@@ -121,7 +123,94 @@ final class SyncEngine {
         }
     }
 
+    /// Envoi sur la montre seul, sans import (F3) : après une génération, des actions du chat ou une séance annulée.
+    // shortcut: ignoré si une synchro tourne déjà ; elle envoie déjà, sauf un changement fait pendant son envoi (repris au passage suivant).
+    func pushWorkouts() async {
+        guard isConnected, !running else { return }
+        if let until = syncState.nextAllowedGarminCallAt, until > Date() { return }
+        running = true
+        phase = .syncing
+        defer {
+            running = false
+            progress = nil
+            save()
+        }
+        let start = await api.requestCount
+        let budget = SyncPolicy.budget(background: false, backfillDone: true)
+        do {
+            try await mirrorWatch(hasBudget: { [api] in await api.requestCount - start < budget })
+            phase = .idle
+        } catch {
+            fail(error)
+        }
+    }
+
     // MARK: - Étapes
+
+    /// Le calendrier Garmin devient le miroir des séances prévues des 7 prochains jours (`WatchSync`) :
+    /// suppression des workouts « RC · » en trop, puis création et planification de ce qui manque.
+    /// Une séance refusée par Garmin (400…) passe en `failed` sans bloquer les autres ; 3 essais au plus.
+    private func mirrorWatch(hasBudget: () async -> Bool) async throws {
+        guard await hasBudget() else { return }
+        progress = "Séances de la montre…"
+        let workouts = try context.fetch(FetchDescriptor<PlannedWorkout>())
+        let remote: [WorkoutRefDTO]
+        do { remote = try await api.workouts() } catch {
+            guard Self.concernsOneItem(error) else { throw error }
+            log("Liste des séances Garmin refusée (\(Self.describe(error))) : envoi reporté")
+            return
+        }
+        let decision = WatchSync.decide(
+            local: workouts.map {
+                WatchSync.Local(dayKey: $0.dayKey, status: $0.status, garminWorkoutId: $0.garminWorkoutId,
+                                state: $0.garminSyncState, attempts: $0.garminAttempts ?? 0)
+            },
+            remote: remote, today: Date())
+        // Identifiants oubliés d'abord : un workout pas encore supprimé le sera au passage suivant (toujours en trop).
+        for index in decision.forget {
+            let workout = workouts[index]
+            workout.garminWorkoutId = nil
+            workout.garminScheduleId = nil
+            if workout.status == "planned" { workout.garminSyncState = "notSent" }
+        }
+        save()
+        var deleted = 0
+        for id in decision.delete {
+            guard await hasBudget() else { return }
+            do {
+                try await api.deleteWorkout(id)
+                deleted += 1
+            } catch {
+                guard Self.concernsOneItem(error) else { throw error }
+                log("Suppression d'une séance refusée (\(Self.describe(error)))")
+            }
+        }
+        var sent = 0
+        for index in decision.send {
+            guard await hasBudget() else { break }
+            let workout = workouts[index]
+            guard let spec = workout.spec else { continue }
+            do {
+                let id = try await api.createWorkout(GarminWorkoutMapper.body(spec))
+                // Gardé tout de suite : si la planification échoue, le workout sera supprimé au passage suivant.
+                workout.garminWorkoutId = id
+                save()
+                workout.garminScheduleId = try await api.schedule(workoutId: id, day: workout.dayKey)
+                workout.garminSyncState = "sent"
+                workout.garminSyncError = nil
+                workout.garminAttempts = nil
+                sent += 1
+            } catch {
+                guard Self.concernsOneItem(error) else { throw error }
+                workout.garminAttempts = (workout.garminAttempts ?? 0) + 1
+                workout.garminSyncState = "failed"
+                workout.garminSyncError = "Garmin a refusé la séance (\(Self.describe(error)))."
+                log("Séance du \(workout.dayKey) refusée (\(Self.describe(error)))")
+            }
+            save()
+        }
+        if deleted + sent > 0 { log("Montre : \(sent) séances envoyées, \(deleted) supprimées") }
+    }
 
     /// Liste des activités, de la plus récente à la plus ancienne. Avant la fin du premier import : jusqu'au bout
     /// de l'historique. Ensuite : jusqu'à la première page qui contient une activité déjà en base.

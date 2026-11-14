@@ -14,8 +14,11 @@ struct RunCoachApp: App {
         let container = AppEnvironment.makeContainer(mock: options.mockData)
         self.options = options
         self.container = container
-        _sync = State(initialValue: SyncEngine(container: container, store: KeychainTokenStore(), http: URLSessionHTTPClient()))
-        _coach = State(initialValue: CoachService(container: container))
+        let sync = SyncEngine(container: container, store: KeychainTokenStore(), http: URLSessionHTTPClient())
+        let coach = CoachService(container: container)
+        coach.onPlanChanged = { Task { await sync.pushWorkouts() } }
+        _sync = State(initialValue: sync)
+        _coach = State(initialValue: coach)
     }
 
     var body: some Scene {

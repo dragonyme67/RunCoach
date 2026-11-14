@@ -22,6 +22,8 @@ struct RootView: View {
 /// dans Safari ; clavier ouvert : le même geste le ferme seulement (demandes de l'utilisateur, 2026-11-13).
 struct MainTabs: View {
     @State private var selection = 0
+    /// Pile de navigation de chaque onglet.
+    @State private var paths = Array(repeating: NavigationPath(), count: 5)
     /// Onglets visités, du plus ancien au plus récent.
     @State private var history: [Int] = []
     @State private var isGoingBack = false
@@ -32,7 +34,12 @@ struct MainTabs: View {
 
     var body: some View {
         GeometryReader { geo in
-            TabView(selection: $selection) {
+            // Toucher un onglet, même celui déjà ouvert, ramène à son écran principal (demande du 2026-11-14).
+            // Le retour par glissement et l'ouverture du Coach depuis une séance changent `selection` directement : pile gardée.
+            TabView(selection: Binding(get: { selection }, set: { tapped in
+                paths[tapped] = NavigationPath()
+                selection = tapped
+            })) {
                 tab(0, geo.size.width).tabItem { Label("Aujourd'hui", systemImage: "sun.max.fill") }.tag(0)
                 tab(1, geo.size.width).tabItem { Label("Plan", systemImage: "calendar") }.tag(1)
                 tab(2, geo.size.width).tabItem { Label("Activités", systemImage: "figure.run") }.tag(2)
@@ -66,7 +73,7 @@ struct MainTabs: View {
                     .overlay(Color.black.opacity(0.12 * (1 - dragX / max(width, 1))).allowsHitTesting(false))
                     .allowsHitTesting(false)
             }
-            NavigationStack {
+            NavigationStack(path: $paths[index]) {
                 root(index).simultaneousGesture(backGesture(width))
             }
             .offset(x: index == selection ? dragX : 0)

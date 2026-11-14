@@ -47,6 +47,8 @@ final class PlannedWorkout {
     /// `notSent` / `sent` / `needsUpdate` / `failed`
     var garminSyncState: String
     var garminSyncError: String?
+    /// Échecs d'envoi consécutifs (3 au plus, §5.5). Optionnel : ajouté à l'étape 5 sur une base déjà installée.
+    var garminAttempts: Int?
     @Relationship(inverse: \Run.plannedWorkout) var completedRun: Run?
     var plan: TrainingPlan?
     var updatedAt: Date
@@ -77,6 +79,7 @@ final class PlannedWorkout {
         estimatedDistanceKm = spec.estimatedDistanceKm
         self.source = source
         if garminWorkoutId != nil { garminSyncState = "needsUpdate" }
+        garminAttempts = nil
         updatedAt = Date()
     }
 
