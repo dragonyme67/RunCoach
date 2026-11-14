@@ -1277,7 +1277,7 @@ Retour de l'utilisateur sur le plan B (2026-11-13) : trait mieux calé, mais (1)
 | # | Idée | Statut |
 |---|---|---|
 | 1 | Sauvegarde et restauration des données (fichier exporté dans Fichiers ou iCloud Drive) | codé (2026-11-14) : `Backup.swift`, Réglages → Tes données ; JSON versionné, tout sauf Keychain ; fichier lu et vérifié avant d'effacer quoi que ce soit |
-| 2 | Déplacer une séance par glisser-déposer dans le Plan, garde-fous vérifiés au lâcher | codé : appui long sur une séance, lâcher sur un jour à venir ; `CoachEngine.checkActions` (mêmes vérifications que le chat, testé) |
+| 2 | Déplacer une séance par glisser-déposer dans le Plan, garde-fous vérifiés au lâcher | codé : appui long sur une séance, lâcher sur un jour à venir ; `CoachEngine.checkActions` (mêmes vérifications que le chat, testé) ; envoi sur la montre aussitôt (`pushWorkouts` attend la fin d'une synchro en cours au lieu de s'abandonner, cas de la synchro d'ouverture), bulle de confirmation |
 | 3 | Mode « jour de course » (semi du 2027-05-16) : plan d'allure km par km, envoyé sur la montre | plus tard |
 | 4 | Renfo guidé dans l'app : minuteur, séries, repos, retour haptique | codé : `StrengthSession` (Core, testé), `StrengthSessionView` depuis le détail d'un renfo ; écran gardé allumé |
 | 5 | Siri / Raccourcis : « Quelle est ma séance aujourd'hui ? », « Envoie mes séances sur la montre » | plus tard |

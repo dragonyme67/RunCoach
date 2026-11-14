@@ -15,6 +15,8 @@ struct PlanView: View {
     /// Jour survolé pendant un glisser-déposer, et raison d'un déplacement refusé.
     @State private var dropTarget: String?
     @State private var moveRefusal: String?
+    /// Confirmation d'un déplacement réussi, affichée 3 s en haut de l'écran.
+    @State private var moveNotice: String?
     /// Semaine affichée : 0 = la semaine en cours, -1 la précédente, +1 la suivante…
     @State private var weekOffset = 0
 
@@ -43,6 +45,23 @@ struct PlanView: View {
         .rcScreenBackground()
         .navigationTitle("Plan")
         .sensoryFeedback(.selection, trigger: dropTarget)
+        .sensoryFeedback(.success, trigger: moveNotice) { _, new in new != nil }
+        .overlay(alignment: .top) {
+            if let moveNotice {
+                Label(moveNotice, systemImage: "applewatch.radiowaves.left.and.right")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.rc.textPrimary)
+                    .padding(.horizontal, Spacing.l)
+                    .padding(.vertical, Spacing.s)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.top, Spacing.s)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .task {
+                        try? await Task.sleep(nanoseconds: 3_000_000_000)
+                        withAnimation(.rcStandard) { self.moveNotice = nil }
+                    }
+            }
+        }
         .alert("Déplacement impossible", isPresented: Binding(get: { moveRefusal != nil }, set: { if !$0 { moveRefusal = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -278,6 +297,10 @@ struct PlanView: View {
         if let refusal = coach.move(workout, to: dayKey) {
             moveRefusal = refusal
             return false
+        }
+        let day = DayKey.date(dayKey)?.formatted(.dateTime.weekday(.wide).day().locale(Locale(identifier: "fr_FR"))) ?? dayKey
+        withAnimation(.rcStandard) {
+            moveNotice = sync.isConnected ? "Déplacée au \(day) · envoi sur ta montre" : "Déplacée au \(day)"
         }
         return true
     }
