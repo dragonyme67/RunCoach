@@ -20,7 +20,12 @@ struct URLSessionHTTPClient: HTTPClient {
         for (name, value) in request.headers {
             urlRequest.setValue(value, forHTTPHeaderField: name)
         }
-        let (data, response) = try await Self.session.data(for: urlRequest)
-        return HTTPResponse(status: (response as? HTTPURLResponse)?.statusCode ?? 0, body: data)
+        do {
+            let (data, response) = try await Self.session.data(for: urlRequest)
+            return HTTPResponse(status: (response as? HTTPURLResponse)?.statusCode ?? 0, body: data)
+        } catch let error as URLError where error.code == .cancelled {
+            // Requête annulée (tâche annulée par SwiftUI ou iOS) : ce n'est pas une panne de réseau.
+            throw CancellationError()
+        }
     }
 }

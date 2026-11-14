@@ -30,6 +30,8 @@ final class AthleteProfile {
     var wantsStrength: Bool
     /// `none` / `dumbbells` / `gym`
     var strengthEquipment: String
+    /// Consignes durables pour le coach (« course 4 min / marche 1 min »). Optionnel : ajouté sur une base déjà installée.
+    var trainingPreference: String?
     var medicalDisclaimerAcceptedAt: Date?
     var updatedAt: Date
 

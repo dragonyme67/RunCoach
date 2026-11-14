@@ -125,9 +125,18 @@ final class SyncEngine {
 
     /// Envoi sur la montre seul, sans import (F3) : après une génération, des actions du chat ou une séance annulée.
     // shortcut: ignoré si une synchro tourne déjà ; elle envoie déjà, sauf un changement fait pendant son envoi (repris au passage suivant).
-    func pushWorkouts() async {
+    /// `retryFailed` (bouton « Envoyer sur la montre ») : les séances en échec retrouvent leurs 3 essais.
+    func pushWorkouts(retryFailed: Bool = false) async {
         guard isConnected, !running else { return }
-        if let until = syncState.nextAllowedGarminCallAt, until > Date() { return }
+        if let until = syncState.nextAllowedGarminCallAt, until > Date() {
+            phase = .failed(Self.waitMessage(until))
+            return
+        }
+        if retryFailed {
+            for workout in (try? context.fetch(FetchDescriptor<PlannedWorkout>())) ?? [] where workout.garminSyncState == "failed" {
+                workout.garminAttempts = nil
+            }
+        }
         running = true
         phase = .syncing
         defer {

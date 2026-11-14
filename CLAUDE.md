@@ -48,7 +48,7 @@ Si un fait d'`ARCHITECTURE.md` s'avère faux, corrige-le là-bas dans le même c
 | 2 | Connexion Garmin et import (tout l'historique au premier passage, puis ce qui manque). | fait ; validé sur l'iPhone par l'utilisateur le 2026-11-13 |
 | 3 | Replay vivant : vue inclinée, entrée en zoom, effets. **Commencer par le prototype 3.0 et le faire valider.** | 3.0 à 3.2 faits (plan B `MKMapView`, satellite vu du dessus par défaut) ; halo cardiaque, bornes km, bandeau réduit livrés le 2026-11-13, en attente du verdict |
 | 4 | Coach IA, génération et adaptation du plan, chat faite (Groq ou Gemini au choix, bascule de modèle sur quota, bilan de forme, chat avec actions confirmées, 4.7, douleur dosée, réglages complets) ; dernière livraison le 2026-11-14, en attente des retours de l'utilisateur sur l'iPhone. Détail : `ARCHITECTURE.md` §8 étape 4 « État » |
-| 5 | Envoi des séances sur la montre | codée le 2026-11-14 (miroir des 7 prochains jours, course et renfo), CI Core verte ; en attente de la vérification sur la Forerunner 745. Détail : `ARCHITECTURE.md` §8 étape 5 « État » |
+| 5 | Envoi des séances sur la montre | fait le 2026-11-14 (miroir des 7 prochains jours, course et renfo, envoi manuel dans Plan) ; l'utilisateur voit les séances arriver sur la Forerunner 745. Détail : `ARCHITECTURE.md` §8 étape 5 « État » |
 | 6 | Finitions, notifications, tests. **À voir avec l'utilisateur (demande du 2026-11-13) : garder l'app disponible en permanence sans payer** (renouvellement auto Sideloadly en Wi-Fi, SideStore sur l'iPhone ; le compte Apple payant est la seule voie sans renouvellement hebdomadaire). | à faire |
 
 Détail des tâches, fichiers, critères de validation et risques : `ARCHITECTURE.md` §8.

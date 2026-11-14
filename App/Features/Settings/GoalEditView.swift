@@ -147,6 +147,16 @@ private struct TrainingFields: View {
             Text("Le plan place 3 séances en fondation, jusqu'à 4 ensuite, jamais plus que tes jours disponibles. Tu peux aussi demander au coach de déplacer une séance un autre jour.")
         }
         Section {
+            TextField("Ex. : course 4 min, marche 1 min", text: Binding(
+                get: { profile.trainingPreference ?? "" },
+                set: { profile.trainingPreference = $0.isEmpty ? nil : $0 }), axis: .vertical)
+                .lineLimit(2...5)
+        } header: {
+            Text("Consignes pour le coach")
+        } footer: {
+            Text("Appliquées à chaque séance générée, sans jamais passer outre la sécurité. Tu peux aussi les donner au coach dans le chat.")
+        }
+        Section {
             Stepper("\(profile.maxSessionMinutes) min", value: $profile.maxSessionMinutes, in: 20...180, step: 5)
         } header: {
             Text("Durée max d'une séance")

@@ -281,6 +281,7 @@ final class CoachService {
             missedLast14d: missed)
         input.detailedRuns = detailed
         input.painLevel = profile.painLevel
+        input.trainingPreference = profile.trainingPreference
         return input
     }
 
@@ -348,6 +349,7 @@ final class CoachService {
             }
             if let fatigue = patch.fatigueLevel { profile.fatigueLevel = fatigue }
             if let note = patch.injuryNote, !note.isEmpty { profile.injuryNote = note }
+            if let preference = patch.trainingPreference { profile.trainingPreference = preference.isEmpty ? nil : preference }
             profile.updatedAt = Date()
             try? context.save()
         } catch let error as LLMError {

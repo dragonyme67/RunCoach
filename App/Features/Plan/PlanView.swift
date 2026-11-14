@@ -9,6 +9,7 @@ struct PlanView: View {
     @Query private var plans: [TrainingPlan]
     @Query private var goals: [Goal]
     @Query private var profiles: [AthleteProfile]
+    @Environment(SyncEngine.self) private var sync
     @State private var mode = 0
     /// Semaine affichée : 0 = la semaine en cours, -1 la précédente, +1 la suivante…
     @State private var weekOffset = 0
@@ -31,11 +32,46 @@ struct PlanView: View {
                 } else {
                     monthView
                 }
+                watchSection
             }
             .padding(Spacing.l)
         }
         .rcScreenBackground()
         .navigationTitle("Plan")
+    }
+
+    // MARK: - Montre
+
+    /// Envoi manuel sur la montre (demande de l'utilisateur, 2026-11-14), en plus de l'envoi automatique.
+    private var watchSection: some View {
+        let todayKey = DayKey.key(Date())
+        let lastKey = DayKey.key(DayKey.addDays(WatchSync.windowDays - 1, to: Date()))
+        let upcoming = workouts.filter { $0.status == "planned" && $0.dayKey >= todayKey && $0.dayKey <= lastKey }
+        let sent = upcoming.filter { $0.garminSyncState == "sent" }.count
+        let status: String
+        if !sync.isConnected {
+            status = "Connecte ton compte Garmin dans Réglages pour envoyer tes séances."
+        } else if sync.phase == .syncing {
+            status = "Envoi en cours…"
+        } else if let message = sync.message {
+            status = message
+        } else {
+            status = "\(sent) sur \(upcoming.count) séances des 7 prochains jours sont sur ta montre."
+        }
+        return VStack(alignment: .leading, spacing: Spacing.s) {
+            SectionHeader(title: "Montre")
+            Text(status)
+                .font(.subheadline)
+                .foregroundStyle(Color.rc.textSecondary)
+            PrimaryButton(title: "Envoyer sur la montre", icon: "applewatch.radiowaves.left.and.right") {
+                Task { await sync.pushWorkouts(retryFailed: true) }
+            }
+            .disabled(!sync.isConnected || sync.phase == .syncing)
+            Text("Les séances arrivent sur la montre à sa prochaine synchro avec Garmin Connect.")
+                .font(.caption)
+                .foregroundStyle(Color.rc.textSecondary)
+        }
+        .rcCard()
     }
 
     // MARK: - Objectif et réglages du plan
