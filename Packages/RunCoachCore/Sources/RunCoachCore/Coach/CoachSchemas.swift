@@ -67,10 +67,11 @@ extension CoachSchemas {
                                                 "date":{"type":"string"},"new_date":{"type":["string","null"]},
                                                 "workout":{"anyOf":[\#(workout),{"type":"null"}]}}}},
                        "profile_patch":{"type":"object","additionalProperties":false,
-                                        "required":["current_pain","pain_level","fatigue_level","injury_note"],
+                                        "required":["current_pain","pain_level","fatigue_level","injury_note","training_preference"],
                                         "properties":{"current_pain":{"type":["boolean","null"]},"pain_level":{"type":["string","null"]},
                                                       "fatigue_level":{"type":["string","null"]},
-                                                      "injury_note":{"type":["string","null"]}}},
+                                                      "injury_note":{"type":["string","null"]},
+                                                  "training_preference":{"type":["string","null"]}}},
                        "safety":{"type":"string","enum":["none","pain","medical"]}}}
         """#
     }
@@ -80,10 +81,11 @@ extension CoachSchemas {
     {"type":"object","additionalProperties":false,"required":["reply","profile_patch","safety"],
      "properties":{"reply":{"type":"string"},
                    "profile_patch":{"type":"object","additionalProperties":false,
-                                    "required":["current_pain","pain_level","fatigue_level","injury_note"],
+                                    "required":["current_pain","pain_level","fatigue_level","injury_note","training_preference"],
                                     "properties":{"current_pain":{"type":["boolean","null"]},"pain_level":{"type":["string","null"]},
                                                   "fatigue_level":{"type":["string","null"]},
-                                                  "injury_note":{"type":["string","null"]}}},
+                                                  "injury_note":{"type":["string","null"]},
+                                                  "training_preference":{"type":["string","null"]}}},
                    "safety":{"type":"string","enum":["none","pain","medical"]}}}
     """#
 }
@@ -97,9 +99,12 @@ public struct ChatResponse: Codable, Equatable, Sendable {
         /// `low` / `normal` / `high`, toute autre valeur est ignorée.
         public var fatigueLevel: String?
         public var injuryNote: String?
+        /// Consigne durable de l'athlète (« course 4 min / marche 1 min ») ; chaîne vide = l'effacer.
+        public var trainingPreference: String?
 
         enum CodingKeys: String, CodingKey {
             case currentPain = "current_pain", painLevel = "pain_level", fatigueLevel = "fatigue_level", injuryNote = "injury_note"
+            case trainingPreference = "training_preference"
         }
 
         public init(currentPain: Bool? = nil, fatigueLevel: String? = nil, injuryNote: String? = nil) {

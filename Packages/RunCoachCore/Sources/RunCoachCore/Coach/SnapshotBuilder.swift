@@ -29,6 +29,8 @@ public enum SnapshotBuilder {
         public var painLevel: String?
         /// Les sorties des 6 dernières semaines avec leur tracé, pour le bilan de forme.
         public var detailedRuns: [AnalyzedRun] = []
+        /// Consignes durables de l'athlète (Réglages → Entraînement, ou le chat).
+        public var trainingPreference: String?
         public var recovery: AthleteSnapshot.Recovery
         public var missedLast14d: Int
 
@@ -120,6 +122,7 @@ public enum SnapshotBuilder {
             injuryNote: input.injuryNote, currentPain: input.currentPain, fatigueLevel: input.fatigueLevel,
             wantsStrength: input.wantsStrength, strengthEquipment: input.strengthEquipment)
         athlete.painLevel = input.currentPain ? (input.painLevel ?? "severe") : nil
+        athlete.preferences = input.trainingPreference.flatMap { $0.isEmpty ? nil : String($0.prefix(300)) }
 
         var goal = AthleteSnapshot.Goal(kind: input.goalKind)
         if input.goalKind == "race", let km = input.goalDistanceKm, let date = input.goalDate {

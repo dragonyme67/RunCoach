@@ -131,6 +131,19 @@ final class GuardrailsTests: XCTestCase {
         XCTAssertEqual(rules(week), ["G9"])
     }
 
+    /// Plus lent que la zone, et course/marche (4 min / 1 min) : permis (demande du 2026-11-14).
+    func testG9AllowsSlowerPaceAndRunWalk() {
+        var week = Self.week()
+        week[0] = Self.easy("2026-11-17", minutes: 35, target: .pace(480, 540))
+        week[1] = WorkoutSpec(date: week[1].date, kind: .easy, title: "Course/marche", rationale: "r",
+                              estimatedDurationMin: 30, estimatedDistanceKm: nil,
+                              blocks: [WorkoutBlock(repeatCount: 6, steps: [
+                                  WorkoutStep(intent: .run, end: .time, value: 240, target: .pace(440, 470)),
+                                  WorkoutStep(intent: .rest, end: .time, value: 60, note: "Marche"),
+                              ])])
+        XCTAssertFalse(rules(week).contains("G9"))
+    }
+
     func testG10TooMuchFastRunning() {
         var brief = Self.brief()
         brief.maxQualitySessions = 1

@@ -93,18 +93,19 @@ public enum Guardrails {
                 add("G8", w.date, "durée estimée \(Int(minutes.rounded())) min, \(Int(limit)) min au plus")
             }
 
-            // G9 : allures dans la zone du type de séance ; rien de plus rapide que le fractionné.
+            // G9 : jamais plus rapide que la zone du type de séance, ni que le fractionné. Plus lent est permis
+            // (demande de l'utilisateur, 2026-11-14 : course/marche et footings lents refusés à tort).
             let zone = snapshot.pace(w.kind)
             var paceOK = true
             for block in w.blocks {
                 for step in block.steps where step.target.type == .pace {
-                    guard let lo = step.target.minSPerKm, let hi = step.target.maxSPerKm else { continue }
+                    guard let lo = step.target.minSPerKm else { continue }
                     if let fastest, lo < fastest - 5 { paceOK = false }
-                    if step.intent == .run, let zone, lo < zone.fastSPerKm - 5 || hi > zone.slowSPerKm + 5 { paceOK = false }
+                    if step.intent == .run, let zone, lo < zone.fastSPerKm - 5 { paceOK = false }
                 }
             }
             if !paceOK {
-                add("G9", w.date, "allure cible hors de la zone \(w.kind.rawValue) (paces_s_per_km)")
+                add("G9", w.date, "allure cible plus rapide que l'allure prévue pour une séance « \(w.kind.label.lowercased()) »")
             }
 
             // G10 : volume rapide (allure tempo ou plus vite) dans une séance.

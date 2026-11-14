@@ -16,11 +16,13 @@ public struct AthleteSnapshot: Codable, Equatable, Sendable {
         public var fatigueLevel: String
         public var wantsStrength: Bool
         public var strengthEquipment: String
+        /// Consignes durables de l'athlète pour ses séances (ex. « course 4 min / marche 1 min »), texte libre saisi par lui.
+        public var preferences: String?
 
         enum CodingKeys: String, CodingKey {
             case age, sex, runningSinceWeeks = "running_since_weeks", level, injuryNote = "injury_note"
             case currentPain = "current_pain", painLevel = "pain_level", fatigueLevel = "fatigue_level", wantsStrength = "wants_strength"
-            case strengthEquipment = "strength_equipment"
+            case strengthEquipment = "strength_equipment", preferences
         }
 
         public init(age: Int, sex: String?, runningSinceWeeks: Int, level: String, injuryNote: String, currentPain: Bool,

@@ -92,4 +92,19 @@ final class AnalysisChatTests: XCTestCase {
             XCTAssertEqual(error as? LLMError, .invalidOutput)
         }
     }
+
+    /// Consigne durable « course/marche » : lue dans la réponse du chat et envoyée à l'IA dans le résumé.
+    func testTrainingPreferenceRoundTrip() throws {
+        let json = #"{"reply":"ok","profile_patch":{"current_pain":null,"pain_level":null,"fatigue_level":null,"injury_note":null,"training_preference":"Course 4 min, marche 1 min"},"safety":"none"}"#
+        let response = try JSONDecoder().decode(ChatResponse.self, from: Data(json.utf8))
+        XCTAssertEqual(response.profilePatch.trainingPreference, "Course 4 min, marche 1 min")
+        XCTAssertTrue(CoachSchemas.chat.contains("training_preference"))
+        XCTAssertTrue(CoachSchemas.chatWithActions.contains("training_preference"))
+
+        var athlete = AthleteSnapshot.Athlete(age: 21, sex: nil, runningSinceWeeks: 3, level: "beginner", injuryNote: "",
+                                              currentPain: false, fatigueLevel: "normal", wantsStrength: false, strengthEquipment: "none")
+        athlete.preferences = "Course 4 min, marche 1 min"
+        let encoded = String(decoding: try JSONEncoder().encode(athlete), as: UTF8.self)
+        XCTAssertTrue(encoded.contains(#""preferences":"Course 4 min, marche 1 min""#))
+    }
 }
