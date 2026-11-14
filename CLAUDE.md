@@ -51,6 +51,8 @@ Si un fait d'`ARCHITECTURE.md` s'avère faux, corrige-le là-bas dans le même c
 | 5 | Envoi des séances sur la montre | fait le 2026-11-14 (miroir des 7 prochains jours, course et renfo, envoi manuel dans Plan) ; l'utilisateur voit les séances arriver sur la Forerunner 745. Détail : `ARCHITECTURE.md` §8 étape 5 « État » |
 | 6 | Finitions, notifications, tests. **À voir avec l'utilisateur (demande du 2026-11-13) : garder l'app disponible en permanence sans payer** (renouvellement auto Sideloadly en Wi-Fi, SideStore sur l'iPhone ; le compte Apple payant est la seule voie sans renouvellement hebdomadaire). | en cours (2026-11-14) : notifications locales, date d'expiration, icône, README faits ; 6.0 : SideStore choisi, source publiée par la CI à chaque build vert (releases GitHub) ; 6.2 à 6.4 au fil des retours |
 
+| 7 | Améliorations choisies le 2026-11-14 (liste complète et statut : `ARCHITECTURE.md` §8 étape 7) | en cours : 1, 2, 4, 6, 8, 9, 10, 11 ; plus tard : 3, 5, 7 |
+
 Détail des tâches, fichiers, critères de validation et risques : `ARCHITECTURE.md` §8.
 Lève les points **[À VÉRIFIER étape N]** de ton étape avant d'écrire le code qui en dépend.
 

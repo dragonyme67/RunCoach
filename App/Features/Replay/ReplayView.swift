@@ -29,6 +29,10 @@ struct ReplayView: View {
     @State private var cameraHeading: Double = 0
     /// Indices des points dessinés en surimpression : un tous les 12 m environ.
     @State private var overlayIndices: [Int] = []
+    /// Zone cardiaque de chaque point en surimpression (0 sans FC), calculée une fois.
+    @State private var overlayZones: [Int] = []
+    /// Profil d'altitude de la barre de progression, ~150 valeurs.
+    @State private var elevationProfile: [Double] = []
     @Environment(\.dismiss) private var dismiss
     @State private var track: Track?
     @State private var coordinates: [CLLocationCoordinate2D] = []
@@ -75,6 +79,8 @@ struct ReplayView: View {
             track = loaded
             coordinates = RouteMap.coordinates(loaded)
             overlayIndices = Self.overlayIndices(loaded?.dist ?? [], stepM: 12)
+            overlayZones = overlayIndices.map { zone(at: $0, in: loaded) }
+            elevationProfile = Self.profile(loaded?.ele, samples: 150)
             overview = loaded.map { ReplayDirector.overview(of: $0, viewAspect: 0.46) }
             chartPoints = makeChartPoints()
             cameraHeading = targetHeading
@@ -209,7 +215,11 @@ struct ReplayView: View {
                           behindM: following ? 3000 : .infinity,
                           aheadM: following ? (style == 0 ? 4000 : 9000) : .infinity,
                           haloColor: haloColor,
-                          pulse: reduceMotion ? 0.3 : beat)
+                          pulse: reduceMotion ? 0.3 : beat,
+                          zones: overlayZones,
+                          runnerZone: zone(at: hudIndex, in: track),
+                          start: coordinates[0],
+                          finish: coordinates[coordinates.count - 1])
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
                 .overlay {
@@ -236,6 +246,18 @@ struct ReplayView: View {
         } else {
             Color.rc.background.ignoresSafeArea()
         }
+    }
+
+    /// Zone cardiaque (1 à 5) au relevé `index`, 0 sans FC ou sans profil.
+    private func zone(at index: Int, in track: Track?) -> Int {
+        guard let hr = track?.hr, index < hr.count, let maxBpm else { return 0 }
+        return HeartZones.zone(bpm: hr[index], maxBpm: maxBpm)
+    }
+
+    /// `samples` valeurs régulièrement espacées d'une colonne (profil d'altitude de la barre de progression).
+    static func profile(_ column: [Double]?, samples: Int) -> [Double] {
+        guard let column, column.count > 1 else { return [] }
+        return (0..<samples).map { column[Int(Double($0) / Double(samples - 1) * Double(column.count - 1))] }
     }
 
     /// Couleur de la zone cardiaque du moment ; sans FC ou sans profil, pas de halo.
@@ -358,9 +380,14 @@ struct ReplayView: View {
 
     private var controls: some View {
         VStack(spacing: Spacing.s) {
-            Slider(value: $progress, in: 0...1)
-                .tint(Color.rc.accent)
-                .accessibilityLabel("Position dans la sortie")
+            if elevationProfile.count > 1 {
+                ReplayScrubber(profile: elevationProfile, progress: $progress)
+                    .frame(height: 44)
+            } else {
+                Slider(value: $progress, in: 0...1)
+                    .tint(Color.rc.accent)
+                    .accessibilityLabel("Position dans la sortie")
+            }
             HStack {
                 ReplaySegments(title: "Vitesse", labels: ["×1", "×2", "×4"], values: [1, 2, 4], selection: $speed)
                     .equatable()

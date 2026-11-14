@@ -30,6 +30,8 @@ struct MainTabs: View {
     /// Décalage de l'onglet pendant le glissement de retour.
     @State private var dragX: CGFloat = 0
     @State private var keyboardVisible = false
+    /// Transition zoom carte → détail (`ZoomTransition.swift`).
+    @Namespace private var zoom
     @Environment(CoachService.self) private var coach
 
     var body: some View {
@@ -47,6 +49,7 @@ struct MainTabs: View {
                 tab(4, geo.size.width).tabItem { Label("Progrès", systemImage: "chart.line.uptrend.xyaxis") }.tag(4)
             }
         }
+        .environment(\.zoomNamespace, zoom)
         .sensoryFeedback(.selection, trigger: selection)
         .onChange(of: coach.pendingDraft) {
             if coach.pendingDraft != nil { selection = 3 }
@@ -141,8 +144,8 @@ extension View {
     /// un `NavigationLink(value:)` rouvrait l'écran précédent au lieu du détail (constat sur iPhone).
     func rcDestinations() -> some View {
         self
-            .navigationDestination(for: PlannedWorkout.self) { PlannedWorkoutDetailView(workout: $0) }
-            .navigationDestination(for: Run.self) { RunDetailView(run: $0) }
+            .navigationDestination(for: PlannedWorkout.self) { PlannedWorkoutDetailView(workout: $0).zoomDestination($0.uuid) }
+            .navigationDestination(for: Run.self) { RunDetailView(run: $0).zoomDestination($0.garminActivityId) }
             .navigationDestination(for: AppRoute.self) { route in
                 switch route {
                 case .settings: SettingsView()

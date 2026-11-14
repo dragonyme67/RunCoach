@@ -215,6 +215,7 @@ struct PlanView: View {
             if let workout = workout {
                 NavigationLink(value: workout) {
                     PlannedRow(workout: workout)
+                        .zoomSource(workout.uuid)
                 }
                 .buttonStyle(.plain)
             } else if day.id >= DayKey.key(Date()), let cancelled = workouts.first(where: { $0.dayKey == day.id && $0.status == "cancelled" }) {

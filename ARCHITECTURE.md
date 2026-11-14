@@ -1273,6 +1273,22 @@ Retour de l'utilisateur sur le plan B (2026-11-13) : trait mieux calé, mais (1)
 | Risques | Les notifications locales planifiées ne survivent pas à l'expiration de la signature ; pas de notifications push sans compte payant. |
 | État (2026-11-14) | 6.1 faite : `App/Services/Notifications.swift`, réglage Réglages → Notifications (désactivé par défaut, heure du rappel, refus d'iOS signalé) ; séance du jour sur 7 jours, dimanche 19 h, expiration de la signature − 2 jours à 18 h ; reprogrammées à chaque passage en arrière-plan et à chaque changement de réglage. Expiration lue dans `embedded.mobileprovision` (`Core/Support/SigningProfile.swift`, testé ; signature CMS non vérifiée, simple affichage) et affichée dans Réglages → À propos. 6.5 faite : icône (`App/Assets.xcassets/AppIcon.appiconset`, 1024 px, tracé orange et coureur ; dessinée par un script Pillow hors dépôt). 6.6 faite : `README.md` (installation Sideloadly, Garmin, clé Groq, renouvellement, dépannage). **6.0 : choix de l'utilisateur (2026-11-14) : SideStore**, « en automatique ». Fait : chaque build vert de `main` publie une release GitHub `build-<n>` (IPA + `source.json` au format AltStore, `scripts/sidestore_source.py`), numéro de build = numéro d'exécution de la CI, et version `0.1.<n>` (SideStore ne voyait pas de mise à jour quand seul le numéro de build changeait, constat du 2026-11-14) ; adresse fixe de la source : `https://github.com/dragonyme67/RunCoach/releases/latest/download/source.json` ; 10 dernières releases gardées. Le renouvellement se fait sur l'iPhone par SideStore avec LocalDevVPN connecté en Wi-Fi ; l'installation initiale (iLoader + USB, fichier d'appairage) reste manuelle, une fois (README). **[À VÉRIFIER sur l'iPhone]** : que SideStore accepte la source (`appPermissions` vides) et si RunCoach y devient une app distincte (identifiant modifié) qui repart de zéro. Nom de l'app : gardé (RunCoach). Petits points réglés : carte Objectif de Progrès = estimation du coach (`CoachService.predictedRaceS`, `PaceModel`) ; séance annulée à venir visible barrée dans Plan, rétablie depuis sa fiche ; la semaine en cours se refait par le chat (« refais ma semaine »), d'où pas de bouton dédié. Restent 6.2 à 6.4 (états vides, accessibilité, performance), à faire au fil de ses retours. Puis (demandes du 2026-11-14) : vitesse du replay gardée d'une sortie à l'autre (`@AppStorage("replay.speed")`), suggestions du chat retirées, Aujourd'hui commence par « Cette semaine » puis la séance du jour. Revue de fin : aucun secret dans le dépôt ni dans les journaux (hôte et chemin seulement), Keychain `AfterFirstUnlock`, HTTPS partout, session éphémère ; écrans et composants partagés sortis dans leur propre fichier (`PlannedWorkoutDetailView`, `ProfileEditView`, `GarminDiagnosticView`, `WeekdayPicker`, `WorkoutRows`). Restent au-dessus de 300 lignes : `ReplayView`, `CoachService`, `SyncEngine`, `RunDetailView`, `PlanView`. |
 
+### Étape 7 — Améliorations choisies par l'utilisateur (liste du 2026-11-14)
+| # | Idée | Statut |
+|---|---|---|
+| 1 | Sauvegarde et restauration des données (fichier exporté dans Fichiers ou iCloud Drive) | **à faire maintenant** |
+| 2 | Déplacer une séance par glisser-déposer dans le Plan, garde-fous vérifiés au lâcher | **à faire maintenant** |
+| 3 | Mode « jour de course » (semi du 2027-05-16) : plan d'allure km par km, envoyé sur la montre | plus tard |
+| 4 | Renfo guidé dans l'app : minuteur, séries, repos, retour haptique | **à faire maintenant** |
+| 5 | Siri / Raccourcis : « Quelle est ma séance aujourd'hui ? », « Envoie mes séances sur la montre » | plus tard |
+| 6 | Records personnels (1 km, 5 km, 10 km, plus longue sortie) et célébration d'un record battu | **à faire maintenant** |
+| 7 | Bilan du dimanche dans l'app (km faits / prévus, ressenti, mot du coach, semaine suivante) | plus tard |
+| 8 | Carte de chaleur de toutes les sorties, locale uniquement | **à faire maintenant** |
+| 9 | Replay : tracé coloré par zone cardiaque, traînée, drapeaux départ / arrivée, profil d'altitude comme barre de progression | **à faire maintenant** |
+| 10 | Transitions animées carte → détail, chargements « squelette » | **à faire maintenant** |
+| 11 | Widgets écran d'accueil et écran verrouillé (séance du jour, anneau des km) : extension et App Group à valider avec SideStore | **à faire maintenant** |
+| 12 | Météo de la prochaine sortie (API gratuite sans clé) | idée, non retenue pour l'instant |
+
 ---
 
 ## 9. Pièges connus

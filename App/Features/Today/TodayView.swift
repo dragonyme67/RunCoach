@@ -44,6 +44,7 @@ struct TodayView: View {
                 if let workout = todayWorkout {
                     NavigationLink(value: workout) {
                         HeroWorkoutCard(workout: workout)
+                            .zoomSource(workout.uuid)
                     }
                     .buttonStyle(.plain)
                     WatchStateRow(state: workout.garminSyncState)
@@ -63,6 +64,7 @@ struct TodayView: View {
                     SectionHeader(title: "Dernière activité")
                     NavigationLink(value: run) {
                         RunRow(run: run)
+                            .zoomSource(run.garminActivityId)
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("run-row")

@@ -11,6 +11,8 @@ struct ProgressScreen: View {
     @Environment(CoachService.self) private var coach
     @State private var analysis: FitnessAnalysis?
     @State private var predictedS: Double?
+    /// Bilan de forme calculé (il décode les tracés de 6 semaines : squelette en attendant).
+    @State private var analysisLoaded = false
 
     var body: some View {
         let weeks = WeekVolume.last(12, runs: runs)
@@ -19,8 +21,11 @@ struct ProgressScreen: View {
                 if let goal = goals.first(where: { $0.isActive }) {
                     GoalCard(goal: goal, estimatedTimeS: predictedS)
                 }
+                RecordsCard(runs: runs)
                 if let analysis {
                     FitnessCard(analysis: analysis)
+                } else if !analysisLoaded && !runs.isEmpty {
+                    SkeletonCard(lines: 4)
                 }
                 VStack(alignment: .leading, spacing: Spacing.m) {
                     SectionHeader(title: "Volume par semaine")
@@ -88,6 +93,7 @@ struct ProgressScreen: View {
         .task(id: runs.count) {
             analysis = coach.analysis()
             predictedS = coach.predictedRaceS()
+            analysisLoaded = true
         }
     }
 
@@ -250,6 +256,7 @@ struct RunListView: View {
                 ForEach(runs) { run in
                     NavigationLink(value: run) {
                         RunRow(run: run)
+                            .zoomSource(run.garminActivityId)
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("run-row")

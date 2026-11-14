@@ -42,6 +42,12 @@ final class Run {
     /// Ressenti 1 à 10, saisi par l'utilisateur.
     var perceivedEffort: Int?
     var userNote: String?
+    /// Meilleurs temps sur 1, 5 et 10 km pris dans la sortie (records, étape 7). Optionnels : ajoutés sur une base
+    /// installée ; `bestsComputed` dit s'ils ont été calculés (nil reste possible pour une sortie trop courte).
+    var best1kS: Double?
+    var best5kS: Double?
+    var best10kS: Double?
+    var bestsComputed: Bool?
 
     @Relationship(deleteRule: .cascade, inverse: \Split.run) var splits: [Split]
     @Relationship(deleteRule: .cascade, inverse: \RunTrack.run) var track: RunTrack?
@@ -91,6 +97,59 @@ final class Run {
         guard let samples else { return }
         track = RunTrack(track: samples)
         splits = samples.kmSplits().map(Split.init(km:))
+        computeBests(samples)
+    }
+
+    /// Course à pied (route, trail, tapis) : seules ces sorties comptent pour les records.
+    var isRunning: Bool { activityType.contains("running") }
+
+    func computeBests(_ samples: Track) {
+        bestsComputed = true
+        guard isRunning else { return }
+        best1kS = PersonalRecords.bestEffortS(samples, distanceM: 1000)
+        best5kS = PersonalRecords.bestEffortS(samples, distanceM: 5000)
+        best10kS = PersonalRecords.bestEffortS(samples, distanceM: 10000)
+    }
+
+    func best(_ distanceM: Double) -> Double? {
+        switch distanceM {
+        case 1000: return best1kS
+        case 5000: return best5kS
+        default: return best10kS
+        }
+    }
+
+    /// Records battus par cette sortie au moment où elle a été courue (« 5 km en 24:31 »), comparés aux sorties d'avant.
+    func records(among runs: [Run]) -> [String] {
+        guard isRunning, bestsComputed == true else { return [] }
+        let before = runs.filter { $0.isRunning && $0.startDate < startDate }
+        var out: [String] = []
+        for d in PersonalRecords.distancesM where PersonalRecords.isRecord(best(d), previous: before.compactMap { $0.best(d) }) {
+            out.append("\(Int(d / 1000)) km en \(Fmt.duration(best(d) ?? 0))")
+        }
+        // La plus longue sortie ne compte qu'à partir de 5 km : sinon la toute première sortie est un « record ».
+        if distanceM >= 5000, PersonalRecords.isRecord(distanceM, previous: before.map(\.distanceM), higherIsBetter: true) {
+            out.append("plus longue sortie : \(Fmt.km(distanceM, decimals: 1)) km")
+        }
+        return out
+    }
+
+    /// Records de l'historique importé avant l'étape 7 : calculés une fois, en rendant la main entre deux sorties.
+    @MainActor
+    static func fillMissingBests(context: ModelContext) async {
+        let pending = ((try? context.fetch(FetchDescriptor<Run>())) ?? []).filter { $0.bestsComputed != true && $0.track != nil }
+        for (i, run) in pending.enumerated() {
+            if let data = run.track?.samplesData, let samples = try? JSONDecoder().decode(Track.self, from: data) {
+                run.computeBests(samples)
+            } else {
+                run.bestsComputed = true
+            }
+            if i % 10 == 9 {
+                try? context.save()
+                await Task.yield()
+            }
+        }
+        if !pending.isEmpty { try? context.save() }
     }
 
     var paceSPerKm: Double {

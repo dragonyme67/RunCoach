@@ -22,6 +22,12 @@ struct ReplayMapView: UIViewRepresentable {
     /// Halo du coureur : couleur de sa zone cardiaque ; `pulse` de 0 à 1 dans le battement en cours.
     let haloColor: UIColor
     let pulse: Double
+    /// Zone cardiaque de chaque point de `coordinates` (1 à 5, 0 = inconnue) et celle du coureur.
+    let zones: [Int]
+    let runnerZone: Int
+    /// Départ et arrivée de la sortie, marqués d'un drapeau.
+    let start: CLLocationCoordinate2D
+    let finish: CLLocationCoordinate2D
 
     func makeUIView(context: Context) -> ReplayMapContainer { ReplayMapContainer() }
 
@@ -31,8 +37,13 @@ struct ReplayMapView: UIViewRepresentable {
 final class ReplayMapContainer: UIView {
     private let map = MKMapView()
     private let aheadHalo = CAShapeLayer(), ahead = CAShapeLayer()
-    private let doneHalo = CAShapeLayer(), done = CAShapeLayer()
+    private let doneHalo = CAShapeLayer(), tail = CAShapeLayer()
+    /// Partie parcourue, une couche par zone cardiaque : 0 = sans FC (couleur d'accent), 1 à 5 = zones.
+    private let zoneLayers = (0...5).map { _ in CAShapeLayer() }
+    private let startFlag = CAShapeLayer(), finishFlag = CAShapeLayer()
     private let halo = CAShapeLayer(), dot = CAShapeLayer()
+    /// Traînée lumineuse : les derniers mètres parcourus, plus épais et clairs.
+    private static let tailM = 200.0
     private var current: ReplayMapView?
     private var style = -1
 
@@ -44,14 +55,35 @@ final class ReplayMapContainer: UIView {
         map.showsScale = false
         addSubview(map)
         let accent = UIColor(Color.rc.accent).cgColor
-        for (layer, color, width) in [(aheadHalo, UIColor.black.withAlphaComponent(0.35).cgColor, 9.0),
-                                      (ahead, UIColor.white.withAlphaComponent(0.7).cgColor, 5.0),
-                                      (doneHalo, UIColor.black.withAlphaComponent(0.35).cgColor, 9.0),
-                                      (done, accent, 5.0)] {
+        let zoneColors = [accent] + (1...5).map { UIColor(Color.rc.zone($0)).cgColor }
+        let lines = [(aheadHalo, UIColor.black.withAlphaComponent(0.35).cgColor, 9.0),
+                     (ahead, UIColor.white.withAlphaComponent(0.7).cgColor, 5.0),
+                     (doneHalo, UIColor.black.withAlphaComponent(0.35).cgColor, 9.0),
+                     (tail, UIColor.white.withAlphaComponent(0.45).cgColor, 13.0)]
+            + zip(zoneLayers, zoneColors).map { ($0.0, $0.1, 5.0) }
+        for (layer, color, width) in lines {
             layer.strokeColor = color
             layer.fillColor = nil
             layer.lineWidth = width
             layer.lineCap = .round
+            layer.lineJoin = .round
+            self.layer.addSublayer(layer)
+        }
+        tail.shadowColor = UIColor.white.cgColor
+        tail.shadowRadius = 6
+        tail.shadowOpacity = 0.8
+        tail.shadowOffset = .zero
+        // Drapeaux : hampe et fanion, la pointe de la hampe posée sur le point.
+        let flag = UIBezierPath()
+        flag.move(to: .zero)
+        flag.addLine(to: CGPoint(x: 0, y: -30))
+        flag.addLine(to: CGPoint(x: 18, y: -24))
+        flag.addLine(to: CGPoint(x: 0, y: -18))
+        for (layer, color) in [(startFlag, UIColor(Color.rc.zone(3))), (finishFlag, UIColor.white)] {
+            layer.path = flag.cgPath
+            layer.fillColor = color.cgColor
+            layer.strokeColor = UIColor.black.withAlphaComponent(0.7).cgColor
+            layer.lineWidth = 2
             layer.lineJoin = .round
             self.layer.addSublayer(layer)
         }
@@ -86,10 +118,19 @@ final class ReplayMapContainer: UIView {
                       animated: false)
         guard bounds.width > 0 else { return }
 
-        let doneLine = UIBezierPath(), aheadLine = UIBezierPath()
+        let doneLine = UIBezierPath(), aheadLine = UIBezierPath(), tailLine = UIBezierPath()
+        let zonePaths = zoneLayers.map { _ in UIBezierPath() }
         let runnerPoint = map.convert(state.runner, toPointTo: self)
         aheadLine.move(to: runnerPoint)
-        var donePenDown = false, aheadPenDown = true
+        var lastDone: CGPoint?
+        var aheadPenDown = true
+        /// Segment parcouru de `a` à `b`, dans la couleur de la zone `zone`, et dans la traînée s'il est récent.
+        func drawDone(_ a: CGPoint, _ b: CGPoint, zone: Int, recent: Bool) {
+            for path in [doneLine, zonePaths[max(0, min(5, zone))]] + (recent ? [tailLine] : []) {
+                path.move(to: a)
+                path.addLine(to: b)
+            }
+        }
         for i in state.coordinates.indices {
             let d = state.distances[i]
             guard d > state.currentDistM - state.behindM, d < state.currentDistM + state.aheadM else { continue }
@@ -100,15 +141,22 @@ final class ReplayMapContainer: UIView {
                                                    centerLat: cam.centerLat, centerLon: cam.centerLon,
                                                    headingDeg: cam.headingDeg, cameraDistanceM: cam.distanceM,
                                                    pitchDeg: cam.pitchDeg) else {
-                if isDone { donePenDown = false } else { aheadPenDown = false }
+                if isDone { lastDone = nil } else { aheadPenDown = false }
                 continue
             }
             let point = map.convert(c, toPointTo: self)
-            let line = isDone ? doneLine : aheadLine
-            if isDone ? donePenDown : aheadPenDown { line.addLine(to: point) } else { line.move(to: point) }
-            if isDone { donePenDown = true } else { aheadPenDown = true }
+            if isDone {
+                if let lastDone {
+                    drawDone(lastDone, point, zone: i < state.zones.count ? state.zones[i] : 0,
+                             recent: d > state.currentDistM - Self.tailM)
+                }
+                lastDone = point
+            } else {
+                if aheadPenDown { aheadLine.addLine(to: point) } else { aheadLine.move(to: point) }
+                aheadPenDown = true
+            }
         }
-        if donePenDown { doneLine.addLine(to: runnerPoint) }
+        if let lastDone { drawDone(lastDone, runnerPoint, zone: state.runnerZone, recent: true) }
 
         // Pas d'animation implicite des calques : le tracé suit la carte image par image.
         CATransaction.begin()
@@ -116,7 +164,16 @@ final class ReplayMapContainer: UIView {
         aheadHalo.path = aheadLine.cgPath
         ahead.path = aheadLine.cgPath
         doneHalo.path = doneLine.cgPath
-        done.path = doneLine.cgPath
+        tail.path = tailLine.cgPath
+        for (layer, path) in zip(zoneLayers, zonePaths) { layer.path = path.cgPath }
+        for (layer, c) in [(startFlag, state.start), (finishFlag, state.finish)] {
+            let visible = ReplayDirector.isInFrontOfCamera(lat: c.latitude, lon: c.longitude,
+                                                           centerLat: cam.centerLat, centerLon: cam.centerLon,
+                                                           headingDeg: cam.headingDeg, cameraDistanceM: cam.distanceM,
+                                                           pitchDeg: cam.pitchDeg)
+            layer.isHidden = !visible
+            if visible { layer.position = map.convert(c, toPointTo: self) }
+        }
         dot.position = runnerPoint
         // Onde qui part du point et s'efface, une par battement.
         halo.position = runnerPoint

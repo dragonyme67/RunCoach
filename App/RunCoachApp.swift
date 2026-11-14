@@ -37,6 +37,7 @@ struct RunCoachApp: App {
             case .active:
                 Task {
                     await sync.syncIfStale()
+                    await Run.fillMissingBests(context: container.mainContext)
                     // Données factices des captures : on ne touche pas au plan de démonstration.
                     guard !options.mockData else { return }
                     coach.updatePlanStatus()

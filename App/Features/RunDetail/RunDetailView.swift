@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import MapKit
 import Charts
 import RunCoachCore
@@ -10,12 +11,18 @@ struct RunDetailView: View {
     @State private var showReplay = false
     /// Point de la sortie sous le doigt (km), pendant un appui prolongé sur une courbe.
     @State private var selectedKm: Double?
+    @Query private var allRuns: [Run]
+    @State private var records: [String] = []
+    @State private var celebrate = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.l) {
                 if run.track != nil {
                     mapHeader
+                }
+                if !records.isEmpty {
+                    recordBanner
                 }
                 summary
                 if !run.isStrength {
@@ -52,10 +59,39 @@ struct RunDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             if track == nil { track = run.loadTrack() }
+            records = run.records(among: allRuns)
+            if !records.isEmpty { celebrate = true }
         }
+        .sensoryFeedback(.success, trigger: celebrate) { _, new in new }
         .fullScreenCover(isPresented: $showReplay) {
             ReplayView(run: run)
         }
+    }
+
+    /// Célébration d'un record battu par cette sortie (étape 7, n° 6).
+    private var recordBanner: some View {
+        HStack(spacing: Spacing.m) {
+            Image(systemName: "trophy.fill")
+                .font(.title)
+                .foregroundStyle(Color.rc.warning)
+                .symbolEffect(.bounce, value: celebrate)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(records.count > 1 ? "Records personnels" : "Record personnel")
+                    .font(.rcHeadline)
+                    .foregroundStyle(Color.rc.textPrimary)
+                Text(records.joined(separator: " · "))
+                    .font(.subheadline)
+                    .monospacedDigit()
+                    .foregroundStyle(Color.rc.textSecondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .rcCard()
+        .scaleEffect(celebrate ? 1 : 0.9)
+        .opacity(celebrate ? 1 : 0)
+        .animation(.spring(response: 0.45, dampingFraction: 0.6), value: celebrate)
+        .accessibilityElement(children: .combine)
     }
 
     private var mapHeader: some View {
