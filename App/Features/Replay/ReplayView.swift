@@ -33,7 +33,8 @@ struct ReplayView: View {
     @State private var track: Track?
     @State private var coordinates: [CLLocationCoordinate2D] = []
     @State var isPlaying = false
-    @State private var speed = 1
+    /// Dernière vitesse choisie, reprise au replay suivant (demande de l'utilisateur, 2026-11-14).
+    @AppStorage("replay.speed") private var speed = 1
     @State private var metric = 0
     @State private var streetScene: MKLookAroundScene?
     @State private var showStreet = false

@@ -10,14 +10,6 @@ struct CoachChatView: View {
     @State private var draft = ""
     @FocusState private var isTyping: Bool
 
-    private let suggestions = [
-        "Comment se passe ma séance de demain ?",
-        "Fais-moi un bilan de ma forme",
-        "Quels sont mes points faibles ?",
-        "Je suis très fatigué",
-        "J'ai mal au genou"
-    ]
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.m) {
@@ -83,21 +75,6 @@ struct CoachChatView: View {
 
     private var composer: some View {
         VStack(spacing: Spacing.s) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Spacing.s) {
-                    ForEach(suggestions, id: \.self) { suggestion in
-                        Button(suggestion) {
-                            draft = suggestion
-                        }
-                        .font(.subheadline)
-                        .foregroundStyle(Color.rc.textPrimary)
-                        .padding(.horizontal, Spacing.m)
-                        .frame(minHeight: 36)
-                        .background(Color.rc.surface, in: Capsule())
-                    }
-                }
-                .padding(.horizontal, Spacing.l)
-            }
             HStack(spacing: Spacing.s) {
                 TextField("Écris à ton coach…", text: $draft, axis: .vertical)
                     .focused($isTyping)
