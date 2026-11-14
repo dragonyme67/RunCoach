@@ -68,6 +68,11 @@ jobs:
             CURRENT_PROJECT_VERSION=${{ github.run_number }} MARKETING_VERSION=0.1.${{ github.run_number }}
           mkdir -p build/ipa/Payload
           cp -R build/dd-ios/Build/Products/Release-iphoneos/RunCoach.app build/ipa/Payload/
+          # IPA non signée : SideStore lit les droits (App Group des widgets) dans les binaires, posés ici par ldid.
+          brew install ldid
+          APP=build/ipa/Payload/RunCoach.app
+          ldid -SWidgets/Resources/RunCoachWidgets.entitlements "$APP/PlugIns/RunCoachWidgets.appex/RunCoachWidgets"
+          ldid -SApp/Resources/RunCoach.entitlements "$APP/RunCoach"
           (cd build/ipa && zip -qry ../RunCoach.ipa Payload)
           ls -la build/RunCoach.ipa
       - name: Upload IPA

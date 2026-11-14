@@ -22,6 +22,14 @@ struct ProgressScreen: View {
                     GoalCard(goal: goal, estimatedTimeS: predictedS)
                 }
                 RecordsCard(runs: runs)
+                NavigationLink(value: AppRoute.heatmap) {
+                    Label("Carte de tous mes parcours", systemImage: "map.fill")
+                        .font(.headline)
+                        .foregroundStyle(Color.rc.textPrimary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .rcCard()
+                }
+                .buttonStyle(.plain)
                 if let analysis {
                     FitnessCard(analysis: analysis)
                 } else if !analysisLoaded && !runs.isEmpty {

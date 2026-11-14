@@ -42,10 +42,14 @@ struct RunCoachApp: App {
                     guard !options.mockData else { return }
                     coach.updatePlanStatus()
                     await coach.autoGenerateIfNeeded()
+                    WidgetBridge.update(context: container.mainContext)
                 }
             case .background:
                 BackgroundSync.schedule()
-                if !options.mockData { Task { await Notifications.reschedule(context: container.mainContext) } }
+                if !options.mockData {
+                    WidgetBridge.update(context: container.mainContext)
+                    Task { await Notifications.reschedule(context: container.mainContext) }
+                }
             default: break
             }
         }

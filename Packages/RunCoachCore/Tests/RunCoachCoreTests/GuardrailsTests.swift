@@ -131,6 +131,17 @@ final class GuardrailsTests: XCTestCase {
         XCTAssertEqual(rules(week), ["G9"])
     }
 
+    /// Glisser-déposer d'une séance (étape 7) : mêmes vérifications que les actions du chat.
+    func testDragAndDropMoveIsChecked() {
+        func check(_ from: String, _ to: String) -> [String] {
+            CoachEngine.checkActions([PlanAction(op: .move, date: from, newDate: to)], planned: Self.week(),
+                                     briefs: [Self.brief()], snapshot: Self.snapshot(), todayKey: "2026-11-16").problems
+        }
+        XCTAssertEqual(check("2026-11-19", "2026-11-20"), [], "un footing déplacé au vendredi : permis")
+        XCTAssertTrue(check("2026-11-18", "2026-11-21").contains { $0.hasPrefix("G13") }, "renfo la veille de la sortie longue")
+        XCTAssertFalse(check("2026-11-22", "2026-11-23").isEmpty, "semaine suivante sans plan")
+    }
+
     /// Plus lent que la zone, et course/marche (4 min / 1 min) : permis (demande du 2026-11-14).
     func testG9AllowsSlowerPaceAndRunWalk() {
         var week = Self.week()

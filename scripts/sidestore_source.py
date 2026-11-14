@@ -35,8 +35,8 @@ source = {
             "size": os.path.getsize(ipa_path),
             "minOSVersion": info.get("MinimumOSVersion", "18.0"),
         }],
-        # Pas d'entitlement ni d'autorisation de confidentialité (NS…UsageDescription) dans l'app.
-        "appPermissions": {"entitlements": [], "privacy": {}},
+        # Seul droit : l'App Group partagé avec les widgets. Aucune autorisation de confidentialité (NS…UsageDescription).
+        "appPermissions": {"entitlements": ["com.apple.security.application-groups"], "privacy": {}},
     }],
     "news": [],
 }

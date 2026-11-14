@@ -20,12 +20,18 @@ targets:
       - App
     dependencies:
       - package: RunCoachCore
+      - target: RunCoachWidgets
     # Synchro Garmin en arrière-plan (BackgroundSync.swift). Fichier généré par xcodegen, fusionné avec les clés INFOPLIST_KEY_*.
     info:
       path: App/Resources/Info.plist
       properties:
         UIBackgroundModes: [fetch]
         BGTaskSchedulerPermittedIdentifiers: [local.runcoach.app.refresh]
+    # Conteneur partagé avec les widgets (WidgetBridge). IPA non signée : la CI pose ces droits avec ldid.
+    entitlements:
+      path: App/Resources/RunCoach.entitlements
+      properties:
+        com.apple.security.application-groups: [group.local.runcoach.app]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: local.runcoach.app
@@ -34,6 +40,30 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: RunCoach
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        TARGETED_DEVICE_FAMILY: "1"
+  # Widgets d'écran d'accueil et d'écran verrouillé (étape 7, n° 11).
+  RunCoachWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Widgets
+      - App/DesignSystem/Tokens.swift
+    dependencies:
+      - package: RunCoachCore
+    info:
+      path: Widgets/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: RunCoach
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Widgets/Resources/RunCoachWidgets.entitlements
+      properties:
+        com.apple.security.application-groups: [group.local.runcoach.app]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: local.runcoach.app.widgets
+        GENERATE_INFOPLIST_FILE: YES
         TARGETED_DEVICE_FAMILY: "1"
   RunCoachUITests:
     type: bundle.ui-testing

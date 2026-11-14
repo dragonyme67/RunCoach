@@ -1276,17 +1276,17 @@ Retour de l'utilisateur sur le plan B (2026-11-13) : trait mieux calé, mais (1)
 ### Étape 7 — Améliorations choisies par l'utilisateur (liste du 2026-11-14)
 | # | Idée | Statut |
 |---|---|---|
-| 1 | Sauvegarde et restauration des données (fichier exporté dans Fichiers ou iCloud Drive) | **à faire maintenant** |
-| 2 | Déplacer une séance par glisser-déposer dans le Plan, garde-fous vérifiés au lâcher | **à faire maintenant** |
+| 1 | Sauvegarde et restauration des données (fichier exporté dans Fichiers ou iCloud Drive) | codé (2026-11-14) : `Backup.swift`, Réglages → Tes données ; JSON versionné, tout sauf Keychain ; fichier lu et vérifié avant d'effacer quoi que ce soit |
+| 2 | Déplacer une séance par glisser-déposer dans le Plan, garde-fous vérifiés au lâcher | codé : appui long sur une séance, lâcher sur un jour à venir ; `CoachEngine.checkActions` (mêmes vérifications que le chat, testé) |
 | 3 | Mode « jour de course » (semi du 2027-05-16) : plan d'allure km par km, envoyé sur la montre | plus tard |
-| 4 | Renfo guidé dans l'app : minuteur, séries, repos, retour haptique | **à faire maintenant** |
+| 4 | Renfo guidé dans l'app : minuteur, séries, repos, retour haptique | codé : `StrengthSession` (Core, testé), `StrengthSessionView` depuis le détail d'un renfo ; écran gardé allumé |
 | 5 | Siri / Raccourcis : « Quelle est ma séance aujourd'hui ? », « Envoie mes séances sur la montre » | plus tard |
-| 6 | Records personnels (1 km, 5 km, 10 km, plus longue sortie) et célébration d'un record battu | **à faire maintenant** |
+| 6 | Records personnels (1 km, 5 km, 10 km, plus longue sortie) et célébration d'un record battu | fait (build 34) : `PersonalRecords` (Core, testé), champs optionnels `Run.best*`, carte Records (Progrès), bannière animée dans le détail d'une sortie |
 | 7 | Bilan du dimanche dans l'app (km faits / prévus, ressenti, mot du coach, semaine suivante) | plus tard |
-| 8 | Carte de chaleur de toutes les sorties, locale uniquement | **à faire maintenant** |
-| 9 | Replay : tracé coloré par zone cardiaque, traînée, drapeaux départ / arrivée, profil d'altitude comme barre de progression | **à faire maintenant** |
-| 10 | Transitions animées carte → détail, chargements « squelette » | **à faire maintenant** |
-| 11 | Widgets écran d'accueil et écran verrouillé (séance du jour, anneau des km) : extension et App Group à valider avec SideStore | **à faire maintenant** |
+| 8 | Carte de chaleur de toutes les sorties, locale uniquement | codé : `RunsHeatmapView` (Progrès → Carte de tous mes parcours), 200 points par sortie, décodage hors du fil principal |
+| 9 | Replay : tracé coloré par zone cardiaque, traînée, drapeaux départ / arrivée, profil d'altitude comme barre de progression | fait (build 34) : une couche par zone, traînée sur 200 m, drapeaux, `ReplayScrubber` |
+| 10 | Transitions animées carte → détail, chargements « squelette » | fait (build 34) : zoom iOS 18 (`ZoomTransition.swift`), `SkeletonCard` |
+| 11 | Widgets écran d'accueil et écran verrouillé (séance du jour, anneau des km) : extension et App Group à valider avec SideStore | codé : cible `RunCoachWidgets`, App Group `group.local.runcoach.app` (nom réel lu dans `ALTAppGroups`), droits posés par `ldid` dans la CI, `WidgetBridge` écrit `widget.json`. **[À VÉRIFIER sur l'iPhone]** : que SideStore enregistre l'App Group (sinon le widget affiche « Ouvre RunCoach ») |
 | 12 | Météo de la prochaine sortie (API gratuite sans clé) | idée, non retenue pour l'instant |
 
 ---

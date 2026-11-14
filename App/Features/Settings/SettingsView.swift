@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 import RunCoachCore
 
 /// Réglages, ouverts dans la pile de l'écran Aujourd'hui (bouton retour et glissement natifs).
@@ -16,6 +17,11 @@ struct SettingsView: View {
     @AppStorage(Notifications.enabledKey) private var notificationsOn = false
     @AppStorage(Notifications.minuteKey) private var reminderMinute = Notifications.defaultMinute
     @State private var notificationsDenied = false
+    @State private var backup: BackupDocument?
+    @State private var showExporter = false
+    @State private var showImporter = false
+    @State private var pendingRestore: Data?
+    @State private var backupMessage: String?
 
     var body: some View {
         Form {
@@ -144,6 +150,15 @@ struct SettingsView: View {
             }
 
             Section {
+                Button("Sauvegarder mes données") { exportBackup() }
+                Button("Restaurer une sauvegarde") { showImporter = true }
+                    .disabled(sync.phase == .syncing)
+            } header: {
+                Text("Tes données")
+            } footer: {
+                Text("Un fichier avec tes sorties, ton plan, ton profil et la conversation, à ranger dans Fichiers ou iCloud Drive. Il contient tes tracés GPS et des données de santé : garde-le pour toi. Ni ta connexion Garmin ni ta clé IA n'y sont.")
+            }
+            Section {
                 Button("Refaire la configuration") {
                     showOnboarding = true
                 }
@@ -175,6 +190,48 @@ struct SettingsView: View {
             OnboardingFlow(onFinish: { showOnboarding = false })
         }
         .fullScreenCover(isPresented: $showGarminLogin) { GarminLoginView() }
+        .fileExporter(isPresented: $showExporter, document: backup, contentType: .json,
+                      defaultFilename: "RunCoach-sauvegarde-\(DayKey.key(Date()))") { result in
+            if case .failure = result { backupMessage = "La sauvegarde n'a pas pu être enregistrée." }
+        }
+        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
+            guard case .success(let url) = result else { return }
+            let access = url.startAccessingSecurityScopedResource()
+            defer { if access { url.stopAccessingSecurityScopedResource() } }
+            pendingRestore = try? Data(contentsOf: url)
+            if pendingRestore == nil { backupMessage = "Ce fichier n'a pas pu être lu." }
+        }
+        .confirmationDialog("Remplacer toutes tes données par cette sauvegarde ?",
+                            isPresented: Binding(get: { pendingRestore != nil }, set: { if !$0 { pendingRestore = nil } }),
+                            titleVisibility: .visible) {
+            Button("Remplacer", role: .destructive) { restoreBackup() }
+            Button("Annuler", role: .cancel) { pendingRestore = nil }
+        } message: {
+            Text("Ce qui est sur l'iPhone sera effacé et remplacé. Pense à sauvegarder d'abord si besoin.")
+        }
+        .alert(backupMessage ?? "", isPresented: Binding(get: { backupMessage != nil }, set: { if !$0 { backupMessage = nil } })) {
+            Button("OK", role: .cancel) {}
+        }
+    }
+
+    private func exportBackup() {
+        do {
+            backup = BackupDocument(data: try Backup.export(context))
+            showExporter = true
+        } catch {
+            backupMessage = "La sauvegarde a échoué."
+        }
+    }
+
+    private func restoreBackup() {
+        guard let data = pendingRestore else { return }
+        pendingRestore = nil
+        do {
+            try Backup.restore(data, into: context)
+            backupMessage = "Sauvegarde restaurée. Reconnecte Garmin et ta clé IA si c'est une nouvelle installation."
+        } catch {
+            backupMessage = error.localizedDescription
+        }
     }
 
     private func row(_ title: String, icon: String, value: String) -> some View {

@@ -9,6 +9,7 @@ struct PlannedWorkoutDetailView: View {
     @Environment(SyncEngine.self) private var sync
     @Environment(\.dismiss) private var dismiss
     @State private var confirmCancel = false
+    @State private var showSession = false
 
     /// « ma séance du mardi 17 novembre (Footing facile) »
     private var reference: String {
@@ -50,6 +51,9 @@ struct PlannedWorkoutDetailView: View {
                     }
                     .rcCard()
                 }
+                if workout.status == "planned", let spec, !spec.exercises.isEmpty {
+                    PrimaryButton(title: "Commencer le renfo guidé", icon: "play.fill") { showSession = true }
+                }
                 if workout.status == "planned" {
                     PrimaryButton(title: "Modifier avec le coach", icon: "bubble.left.and.bubble.right.fill") {
                         coach.pendingDraft = "Pour \(reference) : "
@@ -71,6 +75,9 @@ struct PlannedWorkoutDetailView: View {
         .rcScreenBackground()
         .navigationTitle(kind.label)
         .navigationBarTitleDisplayMode(.inline)
+        .fullScreenCover(isPresented: $showSession) {
+            StrengthSessionView(exercises: spec?.exercises ?? [])
+        }
         .confirmationDialog("Annuler \(reference) ?", isPresented: $confirmCancel, titleVisibility: .visible) {
             Button("Annuler la séance", role: .destructive) {
                 workout.status = "cancelled"

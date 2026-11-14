@@ -10,7 +10,11 @@ struct PlanView: View {
     @Query private var goals: [Goal]
     @Query private var profiles: [AthleteProfile]
     @Environment(SyncEngine.self) private var sync
+    @Environment(CoachService.self) private var coach
     @State private var mode = 0
+    /// Jour survolé pendant un glisser-déposer, et raison d'un déplacement refusé.
+    @State private var dropTarget: String?
+    @State private var moveRefusal: String?
     /// Semaine affichée : 0 = la semaine en cours, -1 la précédente, +1 la suivante…
     @State private var weekOffset = 0
 
@@ -38,6 +42,12 @@ struct PlanView: View {
         }
         .rcScreenBackground()
         .navigationTitle("Plan")
+        .sensoryFeedback(.selection, trigger: dropTarget)
+        .alert("Déplacement impossible", isPresented: Binding(get: { moveRefusal != nil }, set: { if !$0 { moveRefusal = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(moveRefusal ?? "")
+        }
     }
 
     // MARK: - Montre
@@ -218,6 +228,10 @@ struct PlanView: View {
                         .zoomSource(workout.uuid)
                 }
                 .buttonStyle(.plain)
+                // Appui long puis glisser vers un autre jour : la séance s'y déplace si les garde-fous l'acceptent.
+                .draggable(workout.uuid.uuidString) {
+                    PlannedRow(workout: workout).frame(width: 280)
+                }
             } else if day.id >= DayKey.key(Date()), let cancelled = workouts.first(where: { $0.dayKey == day.id && $0.status == "cancelled" }) {
                 // Séance annulée à venir : sa fiche permet de la rétablir.
                 NavigationLink(value: cancelled) {
@@ -237,6 +251,35 @@ struct PlanView: View {
                     .padding(.vertical, Spacing.m)
             }
         }
+        .padding(.horizontal, Spacing.xs)
+        .background(dropTarget == day.id ? Color.rc.accent.opacity(0.15) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .dropDestination(for: String.self) { items, _ in
+            drop(items.first, on: day.id)
+        } isTargeted: { targeted in
+            if targeted { dropTarget = day.id } else if dropTarget == day.id { dropTarget = nil }
+        }
+    }
+
+    /// Séance lâchée sur un jour : déplacée si elle est encore à faire, que le jour est à venir et que les
+    /// garde-fous l'acceptent ; sinon la raison s'affiche.
+    private func drop(_ id: String?, on dayKey: String) -> Bool {
+        dropTarget = nil
+        guard let id, let workout = workouts.first(where: { $0.uuid.uuidString == id }) else { return false }
+        let todayKey = DayKey.key(Date())
+        guard workout.status == "planned", workout.dayKey >= todayKey else {
+            moveRefusal = "Seule une séance encore à faire peut être déplacée."
+            return false
+        }
+        guard dayKey >= todayKey else {
+            moveRefusal = "Impossible de déplacer une séance dans le passé."
+            return false
+        }
+        if let refusal = coach.move(workout, to: dayKey) {
+            moveRefusal = refusal
+            return false
+        }
+        return true
     }
 
     // MARK: - Mois

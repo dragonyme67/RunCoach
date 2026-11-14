@@ -98,53 +98,9 @@ public enum CoachEngine {
             }
             return (text, response)
         }
-        /// Lignes de la carte de confirmation, ou les problèmes à faire corriger.
-        /// Seul ce que les actions introduisent ou aggravent compte : une semaine déjà hors règle (douleur déclarée
-        /// après coup, par exemple) ne bloque pas un changement sans rapport, comme l'ajout d'un renfo.
         func check(_ actions: [PlanAction]) -> Result<[String], Problems> {
-            let outcome = PlanActions.apply(actions, to: planned, todayKey: todayKey)
-            var problems = outcome.problems
-            let touchedDates = Set(actions.flatMap { [$0.date] + ($0.newDate.map { [$0] } ?? []) })
-            let touchedWeeks = Set(touchedDates.compactMap { DayKey.date($0).map { DayKey.key(DayKey.weekStart($0)) } })
-            for weekStart in touchedWeeks.sorted() {
-                guard let brief = briefs.first(where: { $0.weekStart == weekStart }) else {
-                    problems.append("pas de plan défini pour la semaine du \(weekStart) : aucune modification possible")
-                    continue
-                }
-                let end = Guardrails.dayAfterWeek(weekStart)
-                let before = planned.filter { $0.date >= weekStart && $0.date < end }
-                let after = outcome.specs.filter { $0.date >= weekStart && $0.date < end }
-                let existing = Guardrails.validate(week: before, brief: brief, snapshot: snapshot)
-                func km(_ week: [WorkoutSpec]) -> Double {
-                    week.filter { $0.kind != .race }.reduce(0) { $0 + Guardrails.distanceKm($1, easyPaceSPerKm: easy) }
-                }
-                func quality(_ week: [WorkoutSpec]) -> Int { week.filter { $0.kind == .tempo || $0.kind == .intervals }.count }
-                func strength(_ week: [WorkoutSpec]) -> Int { week.filter { $0.kind == .strength }.count }
-                let moreKm = km(after) > km(before) + Guardrails.epsKm
-                let moreQuality = quality(after) > quality(before)
-                let moreDays = Set(after.map(\.date)).count > Set(before.map(\.date)).count
-                let moreStrength = strength(after) > strength(before)
-                for violation in Guardrails.validate(week: after, brief: brief, snapshot: snapshot) {
-                    let wasThere = existing.contains { $0.rule == violation.rule && $0.date == violation.date }
-                    let keep: Bool
-                    if let date = violation.date {
-                        keep = !wasThere || touchedDates.contains(date)
-                    } else if !wasThere {
-                        keep = true
-                    } else {
-                        switch violation.rule {
-                        case "G1", "G2": keep = moreKm
-                        case "G4": keep = moreQuality
-                        case "G6": keep = moreDays
-                        case "G11": keep = moreKm || moreQuality
-                        case "G13": keep = moreStrength
-                        default: keep = true
-                        }
-                    }
-                    if keep { problems.append(violation.description) }
-                }
-            }
-            return problems.isEmpty ? .success(outcome.lines) : .failure(Problems(lines: problems))
+            let result = checkActions(actions, planned: planned, briefs: briefs, snapshot: snapshot, todayKey: todayKey)
+            return result.problems.isEmpty ? .success(result.lines) : .failure(Problems(lines: result.problems))
         }
 
         let first = try await ask()
@@ -197,6 +153,59 @@ public enum CoachEngine {
         let lines: [String]
     }
 
+    /// Vérifie des changements du plan, proposés par le chat ou faits à la main (glisser-déposer) : lignes lisibles
+    /// des changements, et problèmes de sécurité. Seul ce que les actions introduisent ou aggravent compte : une
+    /// semaine déjà hors règle (douleur déclarée après coup, par exemple) ne bloque pas un changement sans rapport.
+    /// Une demande explicite peut sortir des préférences (`chatBrief`), jamais des règles de sécurité.
+    public static func checkActions(_ actions: [PlanAction], planned: [WorkoutSpec], briefs: [WeekBrief],
+                                    snapshot: AthleteSnapshot, todayKey: String) -> (lines: [String], problems: [String]) {
+        let briefs = briefs.map(chatBrief)
+        let easy = Guardrails.easyPaceSPerKm(snapshot)
+        let outcome = PlanActions.apply(actions, to: planned, todayKey: todayKey)
+        var problems = outcome.problems
+        let touchedDates = Set(actions.flatMap { [$0.date] + ($0.newDate.map { [$0] } ?? []) })
+        let touchedWeeks = Set(touchedDates.compactMap { DayKey.date($0).map { DayKey.key(DayKey.weekStart($0)) } })
+        for weekStart in touchedWeeks.sorted() {
+            guard let brief = briefs.first(where: { $0.weekStart == weekStart }) else {
+                problems.append("pas de plan défini pour la semaine du \(weekStart) : aucune modification possible")
+                continue
+            }
+            let end = Guardrails.dayAfterWeek(weekStart)
+            let before = planned.filter { $0.date >= weekStart && $0.date < end }
+            let after = outcome.specs.filter { $0.date >= weekStart && $0.date < end }
+            let existing = Guardrails.validate(week: before, brief: brief, snapshot: snapshot)
+            func km(_ week: [WorkoutSpec]) -> Double {
+                week.filter { $0.kind != .race }.reduce(0) { $0 + Guardrails.distanceKm($1, easyPaceSPerKm: easy) }
+            }
+            func quality(_ week: [WorkoutSpec]) -> Int { week.filter { $0.kind == .tempo || $0.kind == .intervals }.count }
+            func strength(_ week: [WorkoutSpec]) -> Int { week.filter { $0.kind == .strength }.count }
+            let moreKm = km(after) > km(before) + Guardrails.epsKm
+            let moreQuality = quality(after) > quality(before)
+            let moreDays = Set(after.map(\.date)).count > Set(before.map(\.date)).count
+            let moreStrength = strength(after) > strength(before)
+            for violation in Guardrails.validate(week: after, brief: brief, snapshot: snapshot) {
+                let wasThere = existing.contains { $0.rule == violation.rule && $0.date == violation.date }
+                let keep: Bool
+                if let date = violation.date {
+                    keep = !wasThere || touchedDates.contains(date)
+                } else if !wasThere {
+                    keep = true
+                } else {
+                    switch violation.rule {
+                    case "G1", "G2": keep = moreKm
+                    case "G4": keep = moreQuality
+                    case "G6": keep = moreDays
+                    case "G11": keep = moreKm || moreQuality
+                    case "G13": keep = moreStrength
+                    default: keep = true
+                    }
+                }
+                if keep { problems.append(violation.description) }
+            }
+        }
+        return (outcome.lines, problems)
+    }
+
     /// Dans le chat, une demande explicite de l'athlète peut sortir de ses préférences (jours disponibles, jour de la
     /// sortie longue, nombre de séances de renfo), jamais des règles de sécurité : volume, progression, jours durs,
     /// repos, allures, douleur (demande de l'utilisateur, 2026-11-13 : « pouvoir adapter mes séances »).
@@ -215,7 +224,7 @@ public enum CoachEngine {
     }
 
     /// « G7, séance du 2026-11-16 : … » devient « séance du 2026-11-16 : … » pour l'athlète.
-    static func readable(_ line: String) -> String {
+    public static func readable(_ line: String) -> String {
         line.replacingOccurrences(of: #"^G\d+,? ?:? ?"#, with: "", options: .regularExpression)
     }
 

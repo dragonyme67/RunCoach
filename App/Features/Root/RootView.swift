@@ -135,7 +135,7 @@ struct MainTabs: View {
 
 /// Écrans ouverts par valeur dans une pile de navigation (Réglages et ses sous-écrans).
 enum AppRoute: Hashable {
-    case settings, goal, training, profile, health, ai, aiDiagnostic, garminDiagnostic
+    case settings, goal, training, profile, health, ai, aiDiagnostic, garminDiagnostic, heatmap
 }
 
 extension View {
@@ -156,6 +156,7 @@ extension View {
                 case .ai: AISettingsView()
                 case .aiDiagnostic: AIDiagnosticView()
                 case .garminDiagnostic: GarminDiagnosticView()
+                case .heatmap: RunsHeatmapView()
                 }
             }
     }

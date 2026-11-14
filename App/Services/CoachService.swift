@@ -326,20 +326,9 @@ final class CoachService {
         }
         isReplying = true
         defer { isReplying = false }
-        let goal = (try? context.fetch(FetchDescriptor<Goal>()))?.first { $0.isActive }
         let today = Date()
-        let input = snapshotInput(profile: profile, goal: goal, context: context, today: today)
-        let snapshot = SnapshotBuilder.snapshot(input)
         let label = today.formatted(.dateTime.weekday(.wide).day().month(.wide).year().locale(Locale(identifier: "fr_FR")))
-        // Semaine en cours et suivante : les seules que le chat peut modifier, chacune avec ses bornes.
-        let weekStarts = [DayKey.weekStart(today), DayKey.addDays(7, to: DayKey.weekStart(today))].map(DayKey.key)
-        let macro = ((try? context.fetch(FetchDescriptor<TrainingPlan>())) ?? []).first { $0.isActive }?.macroWeeks ?? []
-        let briefs = macro.filter { weekStarts.contains($0.weekStart) }
-            .compactMap { brief(for: $0, profile: profile, goal: goal, snapshot: snapshot, beginner: input.isBeginner) }
-        let end = DayKey.key(DayKey.addDays(14, to: DayKey.weekStart(today)))
-        let planned = ((try? context.fetch(FetchDescriptor<PlannedWorkout>())) ?? [])
-            .filter { $0.dayKey >= weekStarts[0] && $0.dayKey < end && $0.status != "cancelled" }
-            .compactMap(\.spec)
+        let (snapshot, briefs, planned) = editContext(profile: profile, context: context, today: today)
         do {
             let outcome = try await CoachEngine.chat(llm: llm, todayLabel: label, todayKey: DayKey.key(today), snapshot: snapshot,
                                                      upcoming: upcoming(context: context, today: today), planned: planned,
@@ -367,6 +356,45 @@ final class CoachService {
         } catch {
             chatError = LLMError.network.userMessage
         }
+    }
+
+    /// Ce qu'il faut pour vérifier un changement du plan : résumé, bornes de la semaine en cours et de la suivante
+    /// (les seules modifiables), et leurs séances encore valables.
+    private func editContext(profile: AthleteProfile, context: ModelContext, today: Date)
+        -> (snapshot: AthleteSnapshot, briefs: [WeekBrief], planned: [WorkoutSpec]) {
+        let goal = (try? context.fetch(FetchDescriptor<Goal>()))?.first { $0.isActive }
+        let input = snapshotInput(profile: profile, goal: goal, context: context, today: today)
+        let snapshot = SnapshotBuilder.snapshot(input)
+        let weekStarts = [DayKey.weekStart(today), DayKey.addDays(7, to: DayKey.weekStart(today))].map(DayKey.key)
+        let macro = ((try? context.fetch(FetchDescriptor<TrainingPlan>())) ?? []).first { $0.isActive }?.macroWeeks ?? []
+        let briefs = macro.filter { weekStarts.contains($0.weekStart) }
+            .compactMap { brief(for: $0, profile: profile, goal: goal, snapshot: snapshot, beginner: input.isBeginner) }
+        let end = DayKey.key(DayKey.addDays(14, to: DayKey.weekStart(today)))
+        let planned = ((try? context.fetch(FetchDescriptor<PlannedWorkout>())) ?? [])
+            .filter { $0.dayKey >= weekStarts[0] && $0.dayKey < end && $0.status != "cancelled" }
+            .compactMap(\.spec)
+        return (snapshot, briefs, planned)
+    }
+
+    /// Déplace une séance à un autre jour (glisser-déposer dans le Plan, étape 7) après les mêmes vérifications que
+    /// le chat. Renvoie la raison du refus, ou nil si la séance a été déplacée.
+    func move(_ workout: PlannedWorkout, to dayKey: String) -> String? {
+        guard workout.dayKey != dayKey else { return nil }
+        let context = container.mainContext
+        guard let profile = (try? context.fetch(FetchDescriptor<AthleteProfile>()))?.first, var spec = workout.spec else {
+            return "Séance introuvable."
+        }
+        let today = Date()
+        let (snapshot, briefs, planned) = editContext(profile: profile, context: context, today: today)
+        let action = PlanAction(op: .move, date: workout.dayKey, newDate: dayKey)
+        let problems = CoachEngine.checkActions([action], planned: planned, briefs: briefs, snapshot: snapshot,
+                                                todayKey: DayKey.key(today)).problems
+        if let first = problems.first { return CoachEngine.readable(first) }
+        spec.date = dayKey
+        workout.update(with: spec, source: workout.source)
+        try? context.save()
+        onPlanChanged?()
+        return nil
     }
 
     /// Applique les modifications proposées dans un message, après confirmation de l'athlète (§6.6).
